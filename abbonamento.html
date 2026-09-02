@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Abbonamento Pro – Demand Planning Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="container header-content">
+      <a href="index.html" class="logo" style="text-decoration:none;color:inherit;">
+        <img src="logo-mark.jpg" alt="Demand Planning Hub" class="logo-img">
+        <span class="logo-text">DPH</span>
+      </a>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Apri menu">☰</button>
+      <nav class="nav" id="main-nav">
+        <a href="index.html">Strumento</a>
+        <a href="abbonamento.html">Pro</a>
+        <a href="libro.html">Libro</a>
+        <a href="consulenze.html">Consulenze</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-page">
+    <div class="container legal-content">
+      <h1>Versione Pro</h1>
+      <p>
+        La versione Gratis ti fa partire subito, sul tuo computer.
+        Pro è per chi deve lavorare su più serie, algoritmi più solidi
+        e scenari da discutere con commerciali e operations.
+      </p>
+      <p class="legal-note">
+        I pagamenti non sono ancora attivi. Puoi lasciare i tuoi dati:
+        ti avviso io quando Pro si può attivare. Nessun addebito ora.
+      </p>
+
+      <div class="pricing-grid" style="max-width:none;margin:28px 0;">
+        <div class="price-card">
+          <h3>Gratis</h3>
+          <div class="price">0 €</div>
+          <ul>
+            <li>Fino a 5 serie</li>
+            <li>Media mobile, exponential smoothing, regressione lineare</li>
+            <li>Previsioni fino a 12 mesi</li>
+            <li>Elaborazione solo nel browser</li>
+            <li>Grafico + download Excel</li>
+          </ul>
+          <a class="btn btn-outline" href="index.html">Usa Gratis</a>
+        </div>
+        <div class="price-card price-card-pro">
+          <div class="badge">In arrivo</div>
+          <h3>Pro</h3>
+          <div class="price">45 €<span>/mese</span></div>
+          <ul>
+            <li>Famiglia e prodotto, mesi o settimane</li>
+            <li>Promo e phase-in di linea</li>
+            <li>Modelli avanzati e what-if</li>
+          </ul>
+        </div>
+        <div class="price-card">
+          <h3>ProMax</h3>
+          <div class="price">70 €<span>/mese</span></div>
+          <ul>
+            <li>Prodotto × cliente</li>
+            <li>Promo storiche e future per account</li>
+            <li>Uplift da storico o indicato da voi</li>
+            <li>Phase-in anche su un solo cliente</li>
+          </ul>
+        </div>
+      </div>
+
+      <h2>Prenota l’accesso a Pro</h2>
+      <p>Compila: ti contatto a info@demandplanninghub.com quando il pagamento è pronto.</p>
+
+      <form id="form-pro">
+        <div class="form-group">
+          <label for="p-nome">Nome *</label>
+          <input class="input" id="p-nome" required>
+        </div>
+        <div class="form-group">
+          <label for="p-cognome">Cognome *</label>
+          <input class="input" id="p-cognome" required>
+        </div>
+        <div class="form-group">
+          <label for="p-email">Email *</label>
+          <input class="input" id="p-email" type="email" required>
+        </div>
+        <div class="form-group">
+          <label for="p-azienda">Azienda *</label>
+          <input class="input" id="p-azienda" required>
+        </div>
+        <div class="form-group">
+          <label for="p-msg">Cosa ti serve di più</label>
+          <textarea class="input" id="p-msg" rows="4" placeholder="Es. molte serie, Prophet, variabili esterne..."></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Voglio essere avvisato</button>
+        <p class="hint">Nessun pagamento in questa fase.</p>
+      </form>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>© 2026 Demand Planning Hub · Giuliano Montanile</p>
+      <p class="footer-links">
+        <a href="privacy.html">Privacy</a> ·
+        <a href="termini.html">Termini</a>
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('form-pro').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const nome = document.getElementById('p-nome').value.trim();
+      const cognome = document.getElementById('p-cognome').value.trim();
+      const email = document.getElementById('p-email').value.trim();
+      const azienda = document.getElementById('p-azienda').value.trim();
+      const msg = document.getElementById('p-msg').value.trim();
+      const subject = encodeURIComponent('Prenotazione Pro – ' + azienda);
+      const body = encodeURIComponent(
+        'Richiesta avviso versione Pro\n\n' +
+        'Nome: ' + nome + ' ' + cognome + '\n' +
+        'Email: ' + email + '\n' +
+        'Azienda: ' + azienda + '\n\n' +
+        msg
+      );
+      window.location.href = 'mailto:info@demandplanninghub.com?subject=' + subject + '&body=' + body;
+    });
+  </script>
+  <script src="menu.js"></script>
+</body>
+</html>

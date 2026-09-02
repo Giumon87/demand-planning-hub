@@ -1,0 +1,41 @@
+AREA AZIENDALE (punto 1) — come accenderla sul tuo PC
+=====================================================
+
+Questa parte NON si apre facendo doppio clic su index.html.
+Serve Python, una volta sola.
+
+1. Installa Python da python.org (spunta “Add python.exe to PATH”).
+2. Apri Terminale / Prompt dei comandi.
+3. Vai nella cartella del sito, poi in server:
+
+   cd Desktop\demand-planning-hub\server
+
+4. Installa le librerie (una volta sola):
+
+   python -m pip install -r requirements.txt
+
+5. Accendi il server:
+
+   python -m uvicorn app:app --host 127.0.0.1 --port 8000
+
+6. Nel browser apri:
+
+   http://127.0.0.1:8000/area.html
+
+Lì crei l’account (email, password, nome, azienda) e carichi i file.
+Un secondo account = un’altra azienda = non vede i file del primo.
+
+I file stanno in:
+
+   demand-planning-hub\server\data\files\<id_azienda>\
+
+Il database utenti sta in:
+
+   demand-planning-hub\server\data\dph.sqlite
+
+Non pubblicare ancora questa cartella “data” su Vercel.
+Vercel Drop resta il sito vetrina. Questo server è per i pilota,
+poi lo mettiamo su un hosting da 20–40 € (Railway / Render) in Europa.
+
+Per oggi: tieni il terminale aperto mentre testi.
+Per spegnere: Ctrl+C nel terminale.

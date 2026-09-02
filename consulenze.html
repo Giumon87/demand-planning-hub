@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Consulenze – Demand Planning Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="container header-content">
+      <a href="index.html" class="logo" style="text-decoration:none;color:inherit;">
+        <img src="logo-mark.jpg" alt="Demand Planning Hub" class="logo-img">
+        <span class="logo-text">DPH</span>
+      </a>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Apri menu">☰</button>
+      <nav class="nav" id="main-nav">
+        <a href="index.html">Strumento</a>
+        <a href="abbonamento.html">Pro</a>
+        <a href="libro.html">Libro</a>
+        <a href="consulenze.html">Consulenze</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="legal-page">
+    <div class="container legal-content">
+      <h1>Consulenza di demand planning</h1>
+      <p>
+        Hai già i dati, ma ti serve un processo chiaro?
+        Oppure vuoi migliorare l’accuratezza delle previsioni insieme
+        al team commerciale e alla supply chain?
+      </p>
+      <p>Posso aiutarti a:</p>
+      <ul>
+        <li>impostare un processo di demand planning</li>
+        <li>usare meglio le previsioni nel lavoro quotidiano</li>
+        <li>collegare commerciali, operations e magazzino</li>
+        <li>partire dai file Excel che già usi</li>
+      </ul>
+      <p>
+        Lavoro soprattutto con aziende e dealer, anche su mercati diversi tra loro.
+        Non parto da teorie astratte: partiamo dai tuoi numeri.
+      </p>
+      <p>
+        <strong>La prima consulenza è gratuita.</strong>
+        Serve a capire se e come possiamo lavorare insieme.
+        Eventuali percorsi successivi si definiscono dopo, senza impegno.
+      </p>
+
+      <h2>Richiedi una consulenza</h2>
+      <p>Compila il form. La richiesta arriva a info@demandplanninghub.com.</p>
+
+      <form id="form-consulenza">
+        <div class="form-group">
+          <label for="c-nome">Nome *</label>
+          <input class="input" id="c-nome" required>
+        </div>
+        <div class="form-group">
+          <label for="c-cognome">Cognome *</label>
+          <input class="input" id="c-cognome" required>
+        </div>
+        <div class="form-group">
+          <label for="c-email">Email *</label>
+          <input class="input" id="c-email" type="email" required>
+        </div>
+        <div class="form-group">
+          <label for="c-azienda">Azienda *</label>
+          <input class="input" id="c-azienda" required>
+        </div>
+        <div class="form-group">
+          <label for="c-ruolo">Ruolo</label>
+          <input class="input" id="c-ruolo" placeholder="Es. Sales Manager, Demand Planner">
+        </div>
+        <div class="form-group">
+          <label for="c-msg">Messaggio *</label>
+          <textarea class="input" id="c-msg" rows="5" required placeholder="Racconta in breve di cosa hai bisogno"></textarea>
+        </div>
+        <button type="submit" class="btn btn-primary">Invia richiesta</button>
+        <p class="hint">Ti rispondo io, senza passaggi automatici inutili.</p>
+      </form>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <div class="container">
+      <p>© 2026 Demand Planning Hub · Giuliano Montanile</p>
+      <p class="footer-links">
+        <a href="privacy.html">Privacy</a> ·
+        <a href="termini.html">Termini</a>
+      </p>
+    </div>
+  </footer>
+
+  <script>
+    document.getElementById('form-consulenza').addEventListener('submit', function (e) {
+      e.preventDefault();
+      const nome = document.getElementById('c-nome').value.trim();
+      const cognome = document.getElementById('c-cognome').value.trim();
+      const email = document.getElementById('c-email').value.trim();
+      const azienda = document.getElementById('c-azienda').value.trim();
+      const ruolo = document.getElementById('c-ruolo').value.trim();
+      const msg = document.getElementById('c-msg').value.trim();
+      const subject = encodeURIComponent('Richiesta consulenza – ' + azienda);
+      const body = encodeURIComponent(
+        'Nome: ' + nome + ' ' + cognome + '\n' +
+        'Email: ' + email + '\n' +
+        'Azienda: ' + azienda + '\n' +
+        'Ruolo: ' + ruolo + '\n\n' +
+        msg
+      );
+      window.location.href = 'mailto:info@demandplanninghub.com?subject=' + subject + '&body=' + body;
+    });
+  </script>
+  <script src="menu.js"></script>
+</body>
+</html>

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Demand Planning Hub – Previsioni di Domanda Semplici e Precise</title>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- HEADER -->
+  <header class="header">
+    <div class="container header-content">
+      <a href="index.html" class="logo" id="logo-home" style="text-decoration:none;color:inherit;">
+        <img src="logo-mark.jpg" alt="Demand Planning Hub" class="logo-img">
+        <span class="logo-text">DPH</span>
+      </a>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Apri menu">☰</button>
+      <nav class="nav" id="main-nav">
+        <a href="#come-funziona" data-nav="come-funziona">Come funziona</a>
+        <a href="#prezzi" data-nav="prezzi">Prezzi</a>
+        <a href="abbonamento.html">Pro</a>
+        <a href="libro.html">Libro</a>
+        <a href="consulenze.html">Consulenze</a>
+        <a class="btn btn-outline" href="area.html" id="nav-account">Accedi</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- HERO / HOME -->
+  <section class="hero" id="home">
+    <div class="container">
+      <img src="logo-mark.jpg" alt="" class="hero-mark">
+      <p class="eyebrow">Demand Planning Hub</p>
+      <h1>Previsioni di domanda<br>semplici, precise e private</h1>
+      <p class="hero-subtitle">
+        Carica il tuo Excel e ottieni previsioni in pochi secondi.<br>
+        <strong>I tuoi dati restano sul tuo computer</strong> – non escono mai.
+      </p>
+      <button class="btn btn-primary btn-large" id="btn-start">
+        Inizia ora – Gratis
+      </button>
+      <p class="hero-note">Nessuna registrazione richiesta per provare</p>
+      <p class="hero-note">
+        <a href="esempio-previsioni.xlsx" download>Scarica l’esempio Base (4 prodotti)</a>
+      </p>
+    </div>
+  </section>
+
+  <!-- MAIN APP AREA (nascosta all'inizio) -->
+  <main class="app-area" id="app-area" style="display: none;">
+    <div class="container">
+
+      <!-- STEP 1: UPLOAD -->
+      <section class="step" id="step-upload">
+        <div class="step-header">
+          <span class="step-number">1</span>
+          <h2>Carica il tuo file Excel o CSV</h2>
+        </div>
+        
+        <div class="upload-zone" id="upload-zone">
+          <div class="upload-content">
+            <div class="upload-icon">📁</div>
+            <p class="upload-text">Trascina qui il tuo file oppure</p>
+            <label for="file-input" class="btn btn-secondary">Seleziona file</label>
+            <input type="file" id="file-input" accept=".xlsx,.xls,.csv" hidden>
+            <p class="upload-hint">Per la prova Base: un foglio con Data + colonne prodotto. Niente famiglie o clienti.</p>
+            <a class="btn btn-outline" href="esempio-previsioni.xlsx" download>Esempio Base</a>
+          </div>
+        </div>
+
+        <div id="vault-files" class="upload-hint" style="margin-top:16px;"></div>
+
+        <div id="file-info" class="file-info" style="display: none;">
+          <p><strong>File caricato:</strong> <span id="file-name"></span></p>
+          <button class="btn btn-text" id="btn-change-file">Cambia file</button>
+        </div>
+        <p class="upload-hint" style="margin-top:12px;">
+          Pro / ProMax:
+          <a href="esempio-serie-variabili.xlsx" download>esempio famiglie + clienti + promo</a>
+          ·
+          <a href="esempio-previsioni-settimanale.xlsx" download>esempio settimanale</a>
+        </p>
+        <div id="validation-box" class="validation-box" style="display:none;"></div>
+      </section>
+
+      <!-- STEP 2: COLUMN SELECTION (appare dopo upload) -->
+      <section class="step" id="step-columns" style="display: none;">
+        <div class="step-header">
+          <span class="step-number">2</span>
+          <h2>Seleziona le colonne</h2>
+        </div>
+
+        <div class="columns-grid">
+          <div class="form-group">
+            <label for="col-date">Colonna Date</label>
+            <select id="col-date" class="select"></select>
+          </div>
+          <div class="form-group">
+            <label>Colonne Valori</label>
+            <div class="row-actions" style="margin-bottom:8px;">
+              <button type="button" class="btn btn-text" id="btn-select-all">Seleziona tutti</button>
+              <button type="button" class="btn btn-text" id="btn-select-none">Deseleziona</button>
+            </div>
+            <div id="value-columns" class="checkbox-group"></div>
+            <p class="hint">Gratis: max 5 serie. Pro/ProMax: senza limite. La colonna Date non va spuntata.</p>
+          </div>
+        </div>
+
+        <button class="btn btn-primary" id="btn-to-config" disabled>
+          Continua →
+        </button>
+      </section>
+
+      <!-- STEP 3: CONFIGURATION -->
+      <section class="step" id="step-config" style="display: none;">
+        <div class="step-header">
+          <span class="step-number">3</span>
+          <h2>Configura la previsione</h2>
+        </div>
+
+        <div class="config-grid">
+          <div class="form-group">
+            <label for="algorithm">Algoritmo</label>
+            <select id="algorithm" class="select">
+              <option value="moving-average" selected>Media stagionale (consigliata)</option>
+              <option value="seasonal">Copia anno precedente</option>
+              <option value="exp-smoothing">Trend recente + stagione</option>
+              <option value="linear">Regressione + stagione</option>
+              <option value="holt-winters" class="pro-only" disabled>Holt-Winters additivo (Pro)</option>
+              <option value="hw-mult" class="pro-only" disabled>Holt-Winters moltiplicativo (Pro)</option>
+              <option value="damped" class="pro-only" disabled>Trend smorzato (Pro)</option>
+              <option value="momentum" class="pro-only" disabled>Stagione × momentum (Pro)</option>
+              <option value="arima" class="pro-only" disabled>ARIMA semplificato (Pro)</option>
+              <option value="prophet" class="pro-only" disabled>Prophet (approssimazione browser) (Pro)</option>
+              <option value="server-auto" class="pro-only" disabled>Motore server auto (Pro)</option>
+              <option value="optimistic" class="pro-only" disabled>Scenario alto (Pro)</option>
+              <option value="pessimistic" class="pro-only" disabled>Scenario basso (Pro)</option>
+              <option value="compare" class="pro-only" disabled>Best fit (MASE) (Pro)</option>
+            </select>
+            <p class="hint" id="algo-hint">Media dello stesso mese negli anni disponibili. I mesi restano diversi tra loro.</p>
+          </div>
+
+          <div class="form-group">
+            <label for="periods">Periodi da prevedere</label>
+            <p class="hint" id="freq-hint">Se lo storico è a settimane, qui compariranno le settimane.</p>
+            <select id="periods" class="select">
+              <option value="3">3 mesi</option>
+              <option value="6" selected>6 mesi</option>
+              <option value="12">12 mesi</option>
+              <option value="24" class="pro-only" disabled>24 mesi (Pro)</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label for="window-size">Finestra Media Mobile (se usata)</label>
+            <input type="number" id="window-size" class="input" value="3" min="2" max="12">
+          </div>
+        </div>
+
+        <div id="pro-tools" class="pro-tools" style="display:none;">
+          <h3>Variabili esterne e scenari (test Pro)</h3>
+          <p class="hint">Non scarichiamo il meteo vero: applichiamo un effetto automatico in base al tipo di domanda, alla variabile e ai mesi che scegli.</p>
+          <div class="config-grid">
+            <div class="form-group">
+              <label for="demand-type">Tipo di domanda</label>
+              <select id="demand-type" class="select">
+                <option value="generico">Generico / misto</option>
+                <option value="freddo">Stagionale caldo (gelati, bevande, clima)</option>
+                <option value="caldo">Stagionale freddo (riscaldamento, cappotti)</option>
+                <option value="industriale">Industriale / B2B</option>
+                <option value="retail">Retail / promozioni</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="checkbox-item">
+                <input type="checkbox" id="clean-outliers" checked>
+                <span>Pulisci outlier sullo storico</span>
+              </label>
+              <p class="hint">Sostituisce i punti anomali con il valore tipico dello stesso mese, senza trattarli come zero.</p>
+            </div>
+            <div class="form-group">
+              <label for="hier-mode">Famiglie</label>
+              <select id="hier-mode" class="select">
+                <option value="none">Solo serie selezionate</option>
+                <option value="topdown">Prevedi famiglia e disaggrega</option>
+              </select>
+              <p class="hint">Serve il foglio Gerarchia (Famiglia, Prodotto).</p>
+            </div>
+            <div class="form-group">
+              <label for="mix-mode">Mix figli</label>
+              <select id="mix-mode" class="select">
+                <option value="recent">Ultimi 12 mesi</option>
+                <option value="seasonal">Stesso mese dell’anno scorso</option>
+              </select>
+            </div>
+          </div>
+          <p class="hint">Aggiungi più variabili: ognuna agisce solo sui mesi indicati, nello stesso calcolo.</p>
+          <div id="driver-rows"></div>
+          <button type="button" class="btn btn-outline" id="btn-add-driver">+ Aggiungi variabile</button>
+          <p class="hint" style="margin-top:14px;">Scenari what-if extra (oltre allo Scenario A delle variabili).</p>
+          <div id="scenario-rows"></div>
+          <button type="button" class="btn btn-outline" id="btn-add-scenario">+ Aggiungi scenario</button>
+        </div>
+
+        <p class="hint" id="pro-unlock-row">
+          Per testare Pro in locale:
+          <button type="button" class="btn btn-text" id="btn-unlock-pro">Sblocca modalità test Pro</button>
+        </p>
+
+        <button class="btn btn-primary btn-large" id="btn-calculate">
+          Calcola previsione
+        </button>
+      </section>
+
+      <!-- STEP 4: RESULTS -->
+      <section class="step" id="step-results" style="display: none;">
+        <div class="step-header">
+          <span class="step-number">4</span>
+          <h2>Risultati della previsione</h2>
+        </div>
+
+        <div class="results-actions">
+          <div class="form-group" style="margin:0;min-width:220px;">
+            <label for="series-picker">Serie da mostrare</label>
+            <select id="series-picker" class="select"></select>
+          </div>
+          <button class="btn btn-secondary" id="btn-download">Scarica Excel (tutte le serie)</button>
+          <button class="btn btn-outline" id="btn-save">Salva questa previsione</button>
+          <button class="btn btn-text" id="btn-new">Nuova previsione</button>
+        </div>
+
+        <div class="chart-container">
+          <canvas id="forecast-chart"></canvas>
+        </div>
+
+        <div id="outlier-box" class="compare-box" style="display:none;"></div>
+        <div id="compare-box" class="compare-box" style="display:none;"></div>
+
+        <div class="table-container">
+          <table id="results-table">
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Valore Storico</th>
+                <th>Previsione</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="pro-banner">
+          <h3>Vuoi di più?</h3>
+          <p>Con la versione <strong>Pro</strong> puoi usare Prophet, ARIMA, variabili esterne (meteo, petrolio…), più di 5 serie e scenari what-if.</p>
+          <button class="btn btn-primary" id="btn-pro">Scopri Pro</button>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- COME FUNZIONA -->
+  <section class="section" id="come-funziona">
+    <div class="container">
+      <h2>Come funziona</h2>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">1</div>
+          <h3>Carica il file</h3>
+          <p>Trascina il tuo Excel con le serie storiche di vendita.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">2</div>
+          <h3>Scegli le colonne</h3>
+          <p>Indica quale colonna contiene le date e quali i valori.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">3</div>
+          <h3>Ottieni la previsione</h3>
+          <p>In pochi secondi hai grafico, numeri e file Excel pronto.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- PREZZI (semplice) -->
+  <section class="section section-alt" id="prezzi">
+    <div class="container">
+      <h2>Piani</h2>
+      <div class="pricing-grid">
+        <div class="price-card">
+          <h3>Gratis</h3>
+          <div class="price">0 €</div>
+          <ul>
+            <li>Fino a 5 serie storiche</li>
+            <li>3 algoritmi base</li>
+            <li>Previsioni fino a 12 mesi</li>
+            <li>Dati solo sul tuo computer</li>
+          </ul>
+          <button class="btn btn-outline" id="btn-start-2">Inizia gratis</button>
+        </div>
+        <div class="price-card price-card-pro">
+          <div class="badge">Consigliato</div>
+          <h3>Pro</h3>
+          <div class="price">45 €<span>/mese</span></div>
+          <ul>
+            <li>Famiglia e prodotto</li>
+            <li>Mesi o settimane</li>
+            <li>Promo e phase-in di linea</li>
+            <li>Modelli avanzati + best fit</li>
+            <li>What-if e outlier</li>
+          </ul>
+          <button class="btn btn-primary" id="btn-pro-2">Lista Pro</button>
+        </div>
+        <div class="price-card">
+          <h3>ProMax</h3>
+          <div class="price">70 €<span>/mese</span></div>
+          <ul>
+            <li>Grano prodotto-cliente</li>
+            <li>Storico e promo per account</li>
+            <li>Uplift da storico o indicato</li>
+            <li>Phase-in per cliente</li>
+            <li>Due gerarchie: prodotto e commerciale</li>
+          </ul>
+          <a class="btn btn-outline" href="abbonamento.html">Lista ProMax</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="container">
+      <p>© 2026 Demand Planning Hub – I tuoi dati restano tuoi.</p>
+      <p class="footer-links">
+        <a href="abbonamento.html">Pro</a>
+        &nbsp;·&nbsp;
+        <a href="libro.html">Libro</a>
+        &nbsp;·&nbsp;
+        <a href="consulenze.html">Consulenze</a>
+        &nbsp;·&nbsp;
+        <a href="privacy.html">Privacy</a>
+        &nbsp;·&nbsp;
+        <a href="termini.html">Termini</a>
+      </p>
+    </div>
+  </footer>
+
+  <!-- MODAL REGISTRAZIONE LEGGERA -->
+  <div class="modal" id="modal-register" style="display: none;">
+    <div class="modal-content">
+      <button class="modal-close" id="modal-close">&times;</button>
+      <h2>Salva la tua previsione</h2>
+      <p>Si salva nell’area aziendale (solo la tua azienda la vede). Se hai già un account, email e password bastano.</p>
+      <form id="form-register">
+        <div class="form-group">
+          <label for="reg-email">Email *</label>
+          <input type="email" id="reg-email" class="input" required>
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Password *</label>
+          <input type="password" id="reg-password" class="input" required minlength="8">
+        </div>
+        <div class="form-group">
+          <label for="reg-nome">Nome</label>
+          <input type="text" id="reg-nome" class="input">
+        </div>
+        <div class="form-group">
+          <label for="reg-cognome">Cognome</label>
+          <input type="text" id="reg-cognome" class="input">
+        </div>
+        <div class="form-group">
+          <label for="reg-azienda">Azienda</label>
+          <input type="text" id="reg-azienda" class="input">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">Salva previsione</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="menu.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

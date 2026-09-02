@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: demand-planning-hub
+    runtime: python
+    region: frankfurt
+    plan: starter
+    buildCommand: pip install -r server/requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT --app-dir server
+    disk:
+      name: dph-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DPH_DATA_DIR
+        value: /var/data

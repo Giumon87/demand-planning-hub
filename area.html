@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Area aziendale – Demand Planning Hub</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="header">
+    <div class="container header-content">
+      <a href="index.html" class="logo" style="text-decoration:none;color:inherit;">
+        <img src="logo-mark.jpg" alt="Demand Planning Hub" class="logo-img">
+        <span class="logo-text">DPH</span>
+      </a>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Apri menu">☰</button>
+      <nav class="nav" id="main-nav">
+        <a href="index.html">Strumento</a>
+        <a href="abbonamento.html">Pro</a>
+        <a href="libro.html">Libro</a>
+        <a href="consulenze.html">Consulenze</a>
+        <a href="area.html">Area aziendale</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero" style="padding:36px 0 24px;">
+    <div class="container">
+      <p class="eyebrow">Punto 1 — account e file</p>
+      <h1>Area aziendale</h1>
+      <p class="hero-subtitle">Ogni azienda vede solo i propri file. I dati restano sul server di Demand Planning Hub, isolati per account.</p>
+    </div>
+  </section>
+
+  <main class="app-area" style="display:block;">
+    <div class="container">
+
+      <section class="step" id="auth-box">
+        <div class="step-header">
+          <span class="step-number">1</span>
+          <h2 id="auth-title">Accedi</h2>
+        </div>
+        <div class="config-grid">
+          <div class="form-group"><label>Email</label><input class="input" id="email" type="email" autocomplete="username"></div>
+          <div class="form-group"><label>Password</label><input class="input" id="password" type="password" autocomplete="current-password"></div>
+        </div>
+        <div class="config-grid" id="reg-fields" style="display:none;">
+          <div class="form-group"><label>Nome</label><input class="input" id="nome"></div>
+          <div class="form-group"><label>Cognome</label><input class="input" id="cognome"></div>
+          <div class="form-group"><label>Azienda</label><input class="input" id="azienda"></div>
+        </div>
+        <p id="auth-msg" class="upload-hint"></p>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:12px;">
+          <button class="btn btn-primary" id="btn-signin" type="button">Accedi</button>
+          <button class="btn btn-primary" id="btn-register" type="button" style="display:none;">Crea account</button>
+        </div>
+        <p class="upload-hint" id="auth-links" style="margin-top:14px;">
+          <a href="#" id="link-forgot">Password dimenticata?</a>
+          &nbsp;·&nbsp;
+          <a href="#" id="link-register">Non hai ancora un account? Registrati</a>
+        </p>
+        <p class="upload-hint" id="auth-links-reg" style="display:none;margin-top:14px;">
+          <a href="#" id="link-login">Hai già un account? Accedi</a>
+        </p>
+      </section>
+
+      <section class="step" id="vault-box" style="display:none;">
+        <div class="step-header">
+          <span class="step-number">2</span>
+          <h2>I file della tua azienda</h2>
+        </div>
+        <p id="who" class="upload-hint"></p>
+        <p style="display:flex;gap:10px;flex-wrap:wrap;margin:12px 0 18px;">
+          <a class="btn btn-primary" href="index.html?go=upload">Calcola previsione</a>
+          <a class="btn btn-outline" href="report.html">Report e dashboard</a>
+        </p>
+        <p class="upload-hint">Carica un solo Excel compilato. Un’altra azienda non vede questa cartella.</p>
+        <p>
+          <a class="btn btn-outline" href="esempio-previsioni.xlsx" download>Esempio Base</a>
+          <a class="btn btn-outline" href="esempio-serie-variabili.xlsx" download>Esempio Pro / ProMax</a>
+        </p>
+        <input type="file" id="file-up" accept=".xlsx,.xls,.csv">
+        <button class="btn btn-primary" id="btn-up" type="button" style="margin-left:8px;">Carica</button>
+        <button class="btn btn-text" id="btn-out" type="button">Esci</button>
+        <p id="up-msg" class="upload-hint"></p>
+        <table class="results-table" id="file-table" style="margin-top:16px;width:100%;">
+          <thead><tr><th>File</th><th>Dimensione</th><th>Data</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <h3 style="margin-top:28px;">Previsioni salvate</h3>
+        <p class="upload-hint">Il MAPE compare sulla riga precedente quando carichi lo storico aggiornato, ricalcoli e salvi di nuovo.</p>
+        <table class="results-table" id="fc-table" style="width:100%;">
+          <thead><tr><th>Titolo</th><th>Data</th><th>MAPE</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div id="fc-detail" style="margin-top:16px;"></div>
+      </section>
+    </div>
+  </main>
+  <script src="menu.js"></script>
+  <script src="account.js"></script>
+</body>
+</html>
