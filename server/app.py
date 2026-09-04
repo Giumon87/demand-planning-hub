@@ -481,7 +481,13 @@ def smart_forecast(body: SmartIn, authorization: Optional[str] = Header(None)):
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "service": "dph-account"}
+    extras = {}
+    try:
+        from advanced_models import installed
+        extras = installed()
+    except Exception:
+        extras = {"statsforecast": False, "prophet": False}
+    return {"ok": True, "service": "dph-account", "models": extras}
 
 
 if (ROOT / "style.css").exists():

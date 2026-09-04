@@ -186,6 +186,13 @@ def auto_forecast(values, season: int, periods: int) -> dict:
         aa, bb, gg = best_mul
         candidates["Holt-Winters auto mul"] = lambda tr, p, aa=aa, bb=bb, gg=gg: holt_winters_mul(tr, season, p, aa, bb, gg)
 
+    try:
+        from advanced_models import advanced_builders
+
+        candidates.update(advanced_builders(season, len(values)))
+    except Exception:
+        pass
+
     rows = []
     fits = {}
     by_name = {}
@@ -213,4 +220,4 @@ def auto_forecast(values, season: int, periods: int) -> dict:
         mix_name = "Server · " + best_label + " + " + other
         by_name[mix_name] = forecast
         best_label = best_label + " + " + other
-    return {"forecast": forecast, "best": "Server · " + best_label, "rows": rows[:8], "by_name": by_name}
+    return {"forecast": forecast, "best": "Server · " + best_label, "rows": rows[:14], "by_name": by_name}
