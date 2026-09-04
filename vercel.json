@@ -1,5 +1,4 @@
 {
-  "framework": null,
-  "installCommand": "echo skip",
-  "buildCommand": "echo skip"
+  "version": 2,
+  "cleanUrls": false
 }
