@@ -465,6 +465,64 @@ def delete_forecast(forecast_id: int, authorization: Optional[str] = Header(None
     return {"ok": True}
 
 
+@app.get("/api/dashboard")
+def dashboard(authorization: Optional[str] = Header(None)):
+    u = user_from_token(authorization)
+    con = db()
+    rows = con.execute(
+        "SELECT id, title, mape, mape_n, created_at, payload FROM forecasts WHERE company_id = ? ORDER BY created_at DESC",
+        (u["company_id"],),
+    ).fetchall()
+    con.close()
+    history = []
+    last_compare = []
+    for r in rows:
+        history.append(
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "mape": r["mape"],
+                "mape_n": r["mape_n"],
+                "created_at": r["created_at"],
+            }
+        )
+    mapes = [r["mape"] for r in rows if r["mape"] is not None]
+    if len(rows) >= 2:
+        older, newer = rows[1], rows[0]
+        try:
+            old = json.loads(older["payload"] or "{}")
+            new = json.loads(newer["payload"] or "{}")
+        except Exception:
+            old, new = {}, {}
+        hist = {}
+        for s in new.get("series") or []:
+            for p in s.get("history") or []:
+                hist[(s.get("name"), str(p.get("date"))[:10])] = float(p.get("value") or 0)
+        by_series = {}
+        for s in old.get("series") or []:
+            name = s.get("name") or "Serie"
+            pts = []
+            for p in s.get("forecast") or []:
+                d = str(p.get("date"))[:10]
+                a = hist.get((name, d))
+                if a is None:
+                    continue
+                f = float(p.get("value") or 0)
+                mape_i = None if a == 0 else round(100.0 * abs(a - f) / abs(a), 1)
+                pts.append({"date": d, "forecast": f, "actual": a, "mape": mape_i})
+            if pts:
+                by_series[name] = pts
+        last_compare = [{"name": k, "points": v} for k, v in list(by_series.items())[:12]]
+    return {
+        "azienda": u["azienda"],
+        "n_forecasts": len(rows),
+        "avg_mape": round(sum(mapes) / len(mapes), 1) if mapes else None,
+        "history": history,
+        "last_compare": last_compare,
+        "hint": "Salva una previsione, poi al ciclo dopo carica lo storico aggiornato e salva di nuovo: il MAPE si calcola da solo.",
+    }
+
+
 class SmartIn(BaseModel):
     values: list[float] = Field(default_factory=list)
     season: int = 12

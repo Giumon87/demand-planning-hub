@@ -3,7 +3,7 @@ from __future__ import annotations
 
 
 def installed() -> dict:
-    out = {"statsforecast": False, "prophet": False}
+    out = {"statsforecast": False, "prophet": False, "lightgbm": False}
     try:
         import statsforecast  # noqa: F401
         out["statsforecast"] = True
@@ -12,6 +12,11 @@ def installed() -> dict:
     try:
         import prophet  # noqa: F401
         out["prophet"] = True
+    except Exception:
+        pass
+    try:
+        import lightgbm  # noqa: F401
+        out["lightgbm"] = True
     except Exception:
         pass
     return out
@@ -150,4 +155,57 @@ def advanced_builders(season: int, n_points: int) -> dict:
             out["Prophet"] = builder_prophet(season)
         except Exception:
             pass
+    if n_points >= 16:
+        try:
+            out["LightGBM"] = builder_lgbm(season)
+        except Exception:
+            pass
     return out
+
+
+def builder_lgbm(season: int):
+    sl = int(season) if season and season >= 2 else 12
+
+    def fn(values, periods, sl=sl):
+        import numpy as np
+
+        y = [float(v) for v in values]
+        X, yt = [], []
+        for t in range(sl + 1, len(y)):
+            X.append([y[t - 1], y[t - sl], sum(y[t - sl : t]) / sl, t % sl])
+            yt.append(y[t])
+        if len(X) < 8:
+            raise ValueError("serie corta per LightGBM")
+        Xm = np.array(X)
+        ym = np.array(yt)
+        try:
+            import lightgbm as lgb
+
+            m = lgb.LGBMRegressor(
+                n_estimators=80,
+                max_depth=3,
+                learning_rate=0.08,
+                verbosity=-1,
+            )
+            m.fit(Xm, ym)
+        except Exception:
+            from sklearn.ensemble import GradientBoostingRegressor
+
+            m = GradientBoostingRegressor(n_estimators=80, max_depth=2, random_state=0)
+            m.fit(Xm, ym)
+        hist = list(y)
+        out = []
+        for _ in range(int(periods)):
+            t = len(hist)
+            feat = [
+                hist[-1],
+                hist[-sl] if t >= sl else hist[-1],
+                sum(hist[-sl:]) / min(sl, len(hist)),
+                t % sl,
+            ]
+            pred = max(0.0, float(m.predict([feat])[0]))
+            out.append(round(pred, 2))
+            hist.append(pred)
+        return out
+
+    return fn

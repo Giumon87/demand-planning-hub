@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Report – Demand Planning Hub</title>
+  <title>Dashboard – Demand Planning Hub</title>
   <link rel="stylesheet" href="style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <header class="header">
@@ -19,20 +20,34 @@
       </nav>
     </div>
   </header>
-  <section class="hero">
+  <section class="hero" style="padding:36px 0 16px;">
     <div class="container">
       <p class="eyebrow">Area aziendale</p>
-      <h1>Report e dashboard</h1>
-      <p class="hero-subtitle">
-        Qui arriveranno MAPE mese su mese, confronto previsione vs consuntivo
-        e i report da mandare ai commerciali. Li costruiamo sul tuo account,
-        non è ancora attivo.
-      </p>
-      <p>
-        <a class="btn btn-primary" href="area.html">Torna all’area</a>
-        <a class="btn btn-outline" href="index.html">Calcola una previsione</a>
-      </p>
+      <h1>Dashboard accuratezza</h1>
+      <p class="hero-subtitle" id="dash-sub">MAPE sulle previsioni salvate, quando carichi il consuntivo del periodo successivo.</p>
     </div>
   </section>
+  <main class="app-area" style="display:block;">
+    <div class="container">
+      <p id="dash-msg" class="upload-hint"></p>
+      <div class="config-grid" id="kpi-row" style="margin-bottom:20px;"></div>
+      <section class="step">
+        <h2>MAPE nel tempo</h2>
+        <canvas id="mape-chart" height="90"></canvas>
+      </section>
+      <section class="step">
+        <h2>Previsione vs consuntivo (ultimo confronto)</h2>
+        <p class="upload-hint">Serve almeno due previsioni salvate: la prima è il forecast, la seconda lo storico aggiornato.</p>
+        <p>
+          <a class="btn btn-outline" href="esempio-ciclo-1.xlsx" download>Excel ciclo 1 (fino a mag 2026)</a>
+          <a class="btn btn-outline" href="esempio-ciclo-2.xlsx" download>Excel ciclo 2 (+ giu 2026 consuntivo)</a>
+        </p>
+        <div id="compare-box"></div>
+      </section>
+      <p><a class="btn btn-outline" href="area.html">Torna all’area</a>
+         <a class="btn btn-primary" href="index.html?go=upload">Nuova previsione</a></p>
+    </div>
+  </main>
+  <script src="report.js"></script>
 </body>
 </html>

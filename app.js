@@ -582,6 +582,7 @@ async function applyServerEngine(results, seriesData, nPeriods, algo) {
         'server-arima': 'Server · AutoARIMA',
         'server-ets': 'Server · AutoETS',
         'server-mstl': 'Server · MSTL',
+        'server-lgbm': 'Server · LightGBM',
         prophet: 'Server · Prophet',
         'server-prophet': 'Server · Prophet'
       };
