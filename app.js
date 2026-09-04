@@ -563,23 +563,39 @@ async function applyServerEngine(results, seriesData, nPeriods, algo) {
     const dates = src.map(p => p.date);
     const season = inferSeasonLength(dates);
     try {
+      const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+      const t = ctrl ? setTimeout(() => ctrl.abort(), 90000) : null;
       const r = await fetch('/api/smart-forecast', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tok },
-        body: JSON.stringify({ values: values, season: season, periods: nPeriods })
+        body: JSON.stringify({ values: values, season: season, periods: nPeriods }),
+        signal: ctrl ? ctrl.signal : undefined
       });
+      if (t) clearTimeout(t);
       if (!r.ok) continue;
       const data = await r.json();
       lastServerFits[res.name] = data;
       const rows = ((res.compare && res.compare.rows) || []).concat(data.rows || []);
       rows.sort((a, b) => (a.mase || 999) - (b.mase || 999));
       res.compare = Object.assign({}, res.compare || {}, { rows: rows, best: rows[0] ? rows[0].name : (res.compare && res.compare.best) });
-      const want = algo === 'server-auto' || algo === 'prophet' || algo === 'compare';
-      if (want && data.forecast && data.forecast.length) {
+      const prefer = {
+        'server-arima': 'Server · AutoARIMA',
+        'server-ets': 'Server · AutoETS',
+        'server-mstl': 'Server · MSTL',
+        prophet: 'Server · Prophet',
+        'server-prophet': 'Server · Prophet'
+      };
+      const pick = prefer[algo];
+      const by = data.by_name || {};
+      if (pick && by[pick]) {
+        res.forecast = res.forecast.map((p, j) => ({ date: p.date, value: by[pick][j] != null ? by[pick][j] : p.value }));
+        res.chosen = pick;
+        res.notes = (res.notes || []).concat(['Modello server scelto: ' + pick]);
+      } else if ((algo === 'server-auto' || algo === 'compare') && data.forecast && data.forecast.length) {
         const clientRow = ((res.compare && res.compare.rows) || []).find(x => x.name === res.chosen);
         const serverMase = data.rows && data.rows[0] ? data.rows[0].mase : null;
         const clientMase = clientRow ? clientRow.mase : 999;
-        if (algo === 'server-auto' || algo === 'prophet' || (serverMase != null && serverMase <= clientMase)) {
+        if (algo === 'server-auto' || (serverMase != null && serverMase <= clientMase)) {
           res.forecast = res.forecast.map((p, j) => ({ date: p.date, value: data.forecast[j] != null ? data.forecast[j] : p.value }));
           res.chosen = data.best;
           res.notes = (res.notes || []).concat(['Motore server: ' + data.best]);
@@ -716,10 +732,6 @@ btnCalculate.addEventListener('click', async () => {
     forecastResults = attachScenariosAfter(forecastResults);
   }
 
-  if (isPro() && localStorage.getItem('dph_token')) {
-    await applyServerEngine(forecastResults, lastSeriesData, nPeriods, algo);
-  }
-
   lastOutliers = forecastResults.flatMap(r => (r.outliers || []).map(o => ({ ...o, series: r.name })));
   populateSeriesPicker();
   const first = forecastResults[0];
@@ -727,6 +739,24 @@ btnCalculate.addEventListener('click', async () => {
   renderOutlierTable(first ? first.name : null);
   stepResults.style.display = 'block';
   window.scrollTo({ top: stepResults.offsetTop - 80, behavior: 'smooth' });
+
+  if (isPro() && localStorage.getItem('dph_token')) {
+    showValidation('warn', 'Motore server in corso (AutoARIMA, ETS, MSTL, Prophet). Il grafico si aggiorna da solo.', []);
+    try {
+      await applyServerEngine(forecastResults, lastSeriesData, nPeriods, algo);
+      lastOutliers = forecastResults.flatMap(r => (r.outliers || []).map(o => ({ ...o, series: r.name })));
+      const shown = document.getElementById('series-picker');
+      const name = shown && shown.value ? shown.value : (forecastResults[0] && forecastResults[0].name);
+      const res = forecastResults.find(r => r.name === name) || forecastResults[0];
+      if (res) {
+        renderResults(res);
+        renderOutlierTable(res.name);
+      }
+      showValidation('ok', 'Motore server applicato. In tabella MASE vedi AutoARIMA, ETS, MSTL, Prophet.', []);
+    } catch (e) {
+      showValidation('warn', 'Grafico pronto con i modelli del browser. Il server non ha risposto in tempo.', []);
+    }
+  }
 });
 
 function populateSeriesPicker() {
