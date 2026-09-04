@@ -8,12 +8,14 @@
 
   fetch("/api/dashboard", { headers: { Authorization: "Bearer " + token } })
     .then((r) => {
-      if (!r.ok) throw new Error("non autorizzato");
+      if (r.status === 401) throw new Error("Sessione scaduta. Torna in Area e accedi.");
+      if (r.status === 404) throw new Error("Dashboard non ancora sul server. Attendi il deploy e ricarica.");
+      if (!r.ok) throw new Error("Errore server " + r.status + ". Riprova dopo il deploy.");
       return r.json();
     })
     .then(draw)
-    .catch(() => {
-      msg.textContent = "Non riesco a leggere i dati. Accedi di nuovo da Area aziendale.";
+    .catch((e) => {
+      msg.textContent = e.message || "Non riesco a leggere i dati. Accedi di nuovo da Area aziendale.";
     });
 
   function draw(d) {

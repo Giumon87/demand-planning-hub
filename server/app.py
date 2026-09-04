@@ -514,7 +514,7 @@ def dashboard(authorization: Optional[str] = Header(None)):
                 by_series[name] = pts
         last_compare = [{"name": k, "points": v} for k, v in list(by_series.items())[:12]]
     return {
-        "azienda": u["azienda"],
+        "azienda": u["company_name"],
         "n_forecasts": len(rows),
         "avg_mape": round(sum(mapes) / len(mapes), 1) if mapes else None,
         "history": history,
