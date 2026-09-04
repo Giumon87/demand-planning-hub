@@ -2215,12 +2215,12 @@ function renderResults(result) {
           pointRadius: 3
         }
   ];
-  if (result.scenarioA) {
+  if (result.scenarioA && collectDrivers().length) {
     const a = result.scenarioA.map(p => p.value);
     const same = a.every((v, i) => Math.abs((v || 0) - (forecastValues[i] || 0)) < 0.15);
     if (!same) {
       datasets.push({
-        label: collectDrivers().length ? 'Senza variabili' : 'Scenario A (variabile)',
+        label: 'Senza variabili',
         data: [...Array(histValues.length).fill(null), ...a],
         borderColor: '#d97706',
         borderDash: [2, 3],
@@ -2299,7 +2299,9 @@ function renderResults(result) {
   const thead = document.querySelector('#results-table thead tr');
   if (thead) {
     thead.innerHTML = isPro()
-      ? '<th>Data</th><th>Storico</th><th>Base</th><th>Scenario A</th>' + (extraHeads ? '<th>' + extraHeads + '</th>' : '')
+      ? (collectDrivers().length
+        ? '<th>Data</th><th>Storico</th><th>Base</th><th>Senza variabili</th>' + (extraHeads ? '<th>' + extraHeads + '</th>' : '')
+        : '<th>Data</th><th>Storico</th><th>Base</th>' + (extraHeads ? '<th>' + extraHeads + '</th>' : ''))
       : '<th>Data</th><th>Valore Storico</th><th>Previsione</th>';
   }
 
@@ -2307,7 +2309,9 @@ function renderResults(result) {
     const tr = document.createElement('tr');
     const extraEmpty = extras.map(() => '<td>—</td>').join('');
     tr.innerHTML = isPro()
-      ? `<td>${formatDate(p.date)}</td><td>${p.value.toLocaleString('it-IT')}</td><td>—</td><td>—</td>${extraEmpty}`
+      ? (collectDrivers().length
+        ? `<td>${formatDate(p.date)}</td><td>${p.value.toLocaleString('it-IT')}</td><td>—</td><td>—</td>${extraEmpty}`
+        : `<td>${formatDate(p.date)}</td><td>${p.value.toLocaleString('it-IT')}</td><td>—</td>${extraEmpty}`)
       : `<td>${formatDate(p.date)}</td><td>${p.value.toLocaleString('it-IT')}</td><td>—</td>`;
     tbody.appendChild(tr);
   });
@@ -2318,7 +2322,9 @@ function renderResults(result) {
     const a = result.scenarioA ? result.scenarioA[i].value.toLocaleString('it-IT') : '';
     const extraCells = extras.map(e => '<td>' + e.values[i].toLocaleString('it-IT') + '</td>').join('');
     tr.innerHTML = isPro()
-      ? `<td>${formatDate(p.date)}</td><td>—</td><td><strong>${p.value.toLocaleString('it-IT')}</strong></td><td>${a}</td>${extraCells}`
+      ? (collectDrivers().length
+        ? `<td>${formatDate(p.date)}</td><td>—</td><td><strong>${p.value.toLocaleString('it-IT')}</strong></td><td>${a}</td>${extraCells}`
+        : `<td>${formatDate(p.date)}</td><td>—</td><td><strong>${p.value.toLocaleString('it-IT')}</strong></td>${extraCells}`)
       : `<td>${formatDate(p.date)}</td><td>—</td><td><strong>${p.value.toLocaleString('it-IT')}</strong></td>`;
     tbody.appendChild(tr);
   });
