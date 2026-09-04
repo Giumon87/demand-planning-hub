@@ -603,6 +603,7 @@ async function applyServerEngine(results, seriesData, nPeriods, algo) {
       }
     } catch (e) {}
   }
+  syncScenarioA(results);
 }
 
 // ===== CALCOLO PREVISIONE =====
@@ -2216,7 +2217,7 @@ function renderResults(result) {
   ];
   if (result.scenarioA) {
     const a = result.scenarioA.map(p => p.value);
-    const same = a.every((v, i) => v === forecastValues[i]);
+    const same = a.every((v, i) => Math.abs((v || 0) - (forecastValues[i] || 0)) < 0.15);
     if (!same) {
       datasets.push({
         label: collectDrivers().length ? 'Senza variabili' : 'Scenario A (variabile)',
