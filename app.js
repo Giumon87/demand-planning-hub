@@ -1337,11 +1337,18 @@ function applyDriverScenario(base) {
 }
 
 function syncScenarioA(results) {
+  const drivers = collectDrivers();
   (results || []).forEach(r => {
     if (!r.forecast) return;
-    const base = r.forecast.map(p => p.value);
-    const adj = applyDriverScenario(base);
-    r.scenarioA = r.forecast.map((p, i) => ({ date: p.date, value: adj[i] }));
+    const raw = r.forecast.map(p => p.value);
+    if (!drivers.length) {
+      r.scenarioA = r.forecast.map((p, i) => ({ date: p.date, value: raw[i] }));
+      return;
+    }
+    const adj = applyDriverScenario(raw);
+    r.forecast = r.forecast.map((p, i) => ({ date: p.date, value: adj[i] }));
+    r.scenarioA = r.forecast.map((p, i) => ({ date: p.date, value: raw[i] }));
+    r._rawWithoutDrivers = raw;
   });
 }
 
@@ -2151,15 +2158,23 @@ function applyModelToSeries(seriesName, modelName) {
     fc = cached.by_name[modelName];
   } else if (cached && (wantBest || modelName === cached.best) && cached.forecast) {
     fc = cached.forecast;
+  } else if (cmp.builders && cmp.builders[modelName]) {
+    fc = cmp.builders[modelName]();
   } else {
-    fc = wantBest
-      ? cmp.forecast
-      : (cmp.builders[modelName] ? cmp.builders[modelName]() : cmp.forecast);
+    fc = wantBest ? cmp.forecast : (res.forecast || []).map(p => p.value);
   }
   fc = continueDecline(values, fc);
-  res.forecast = res.forecast.map((p, i) => ({ date: p.date, value: fc[i] }));
-  res.compare = cmp;
-  res.chosen = wantBest ? cmp.best : modelName;
+  res.forecast = res.forecast.map((p, i) => ({ date: p.date, value: fc[i] != null ? fc[i] : p.value }));
+  const mergedRows = ((cmp.rows || []).concat((cached && cached.rows) || []));
+  mergedRows.sort((a, b) => (a.mase || 999) - (b.mase || 999));
+  const seen = {};
+  const rows = mergedRows.filter(r => {
+    if (seen[r.name]) return false;
+    seen[r.name] = 1;
+    return true;
+  });
+  res.compare = Object.assign({}, cmp, { rows: rows, best: rows[0] ? rows[0].name : cmp.best });
+  res.chosen = wantBest ? ((cached && cached.best) || cmp.best) : modelName;
   res.notes = (res.notes || []).filter(n => n.indexOf('Modello scelto') === -1);
   if (!wantBest) res.notes.push('Modello scelto a mano su questa serie: ' + modelName + '.');
   else res.notes.push('Best fit ripristinato su questa serie: ' + cmp.best + '.');
@@ -2204,7 +2219,7 @@ function renderResults(result) {
     const same = a.every((v, i) => v === forecastValues[i]);
     if (!same) {
       datasets.push({
-        label: 'Scenario A (variabile)',
+        label: collectDrivers().length ? 'Senza variabili' : 'Scenario A (variabile)',
         data: [...Array(histValues.length).fill(null), ...a],
         borderColor: '#d97706',
         borderDash: [2, 3],
