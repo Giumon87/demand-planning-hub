@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>La soluzione – Demand Planning Hub</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="dph-host.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="container header-content">
+      <a href="index.html" class="logo" style="text-decoration:none;">
+        <img src="logo-mark.jpg" alt="Demand Planning Hub" class="logo-img">
+        <span class="logo-text">DPH</span>
+      </a>
+      <button class="nav-toggle" id="nav-toggle" aria-label="Apri menu">☰</button>
+      <nav class="nav" id="main-nav">
+        <a href="soluzione.html">La soluzione</a>
+        <a href="index.html">Strumento</a>
+        <a href="libro.html">Libro</a>
+        <a href="consulenze.html">Consulenze</a>
+        <a class="btn btn-outline" href="area.html">Accedi</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero">
+    <div class="container">
+      <img src="logo-mark.jpg" alt="" class="hero-mark">
+      <p class="eyebrow">Chi siamo</p>
+      <h1>Non vendiamo un grafico.<br>Mettiamo ordine alla domanda.</h1>
+      <p class="hero-subtitle">
+        Demand Planning Hub nasce per le PMI che non hanno un dipartimento di planning
+        e non vogliono un software da sei mesi di progetto.
+      </p>
+    </div>
+  </section>
+
+  <main class="legal-page" style="padding-top:8px;">
+    <div class="container legal-content">
+      <h2>Il problema</h2>
+      <p>
+        I mercati si muovono più in fretta delle tabelle Excel. I commerciali sentono il cliente,
+        il magazzino sente lo stock, la direzione sente il fatturato. In mezzo manca un numero
+        condiviso: <strong>quanto venderemo, per prodotto, nel prossimo periodo</strong>.
+      </p>
+      <p>
+        Senza quel numero si produce troppo, o troppo poco. Si discute. Si compra “un po’ di più
+        per sicurezza”. Poi arriva il consuntivo e nessuno misura se la previsione valeva qualcosa.
+      </p>
+
+      <h2>Cosa facciamo</h2>
+      <p>Tre pezzi, una sola testa — Giuliano Montanile.</p>
+      <ol>
+        <li><strong>Lo strumento</strong> — carichi lo storico, esce una previsione. Gratis per provare.
+          Pro e ProMax quando servono famiglie, clienti, promo, settimane, modelli sul server.</li>
+        <li><strong>Il libro</strong> — il metodo: processi, algoritmi, S&amp;OP, errori da non ripetere.</li>
+        <li><strong>La consulenza</strong> — la prima call è gratuita. Poi si vede se serve impostare il processo in azienda.</li>
+      </ol>
+
+      <h2>A chi è rivolto</h2>
+      <p>
+        PMI italiane (e non solo) senza demand planner dedicato. Chi vende tramite dealer,
+        su più mercati, con mix diverso da paese a paese. Chi ha già l’Excel e non un APS.
+      </p>
+
+      <h2>Come lavoriamo sui dati</h2>
+      <p>
+        La prova gratis gira nel browser. Area aziendale e motori Pro stanno su un server in Europa,
+        file isolati per azienda. Non vendiamo i tuoi numeri a nessuno.
+      </p>
+
+      <p style="margin-top:32px;display:flex;gap:12px;flex-wrap:wrap;">
+        <a class="btn btn-primary" href="index.html">Prova lo strumento</a>
+        <a class="btn btn-outline" href="consulenze.html">Chiedi una consulenza</a>
+        <a class="btn btn-outline" href="libro.html">Il libro</a>
+      </p>
+    </div>
+  </main>
+  <script>
+    document.getElementById('nav-toggle')?.addEventListener('click', () => {
+      document.getElementById('main-nav')?.classList.toggle('open');
+    });
+  </script>
+</body>
+</html>
