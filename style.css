@@ -889,3 +889,6 @@ h1, h2, .logo-text { font-family: "Source Serif 4", Georgia, serif; }
 .story-dot.on{background:#1B4F8A;}
 .video-band .upload-hint{color:#334155;}
 .logo-img{background:#fff;border-radius:50%;padding:3px;}
+
+.logo-img,.hero-mark{border-radius:12px !important;background:#fff;padding:4px;}
+.hero-mark{height:112px;width:112px;object-fit:contain;}
