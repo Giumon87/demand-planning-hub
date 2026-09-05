@@ -54,19 +54,12 @@
     <div class="container">
       <p class="eyebrow">Perché serve</p>
       <h2>Cosa succede quando la previsione è sbagliata</h2>
-      <div class="story-card" id="dph-story">
-        <p class="eyebrow" id="story-kicker">1 / 5</p>
-        <h3 id="story-title">Oggi si parte a sensazione</h3>
-        <p id="story-text"></p>
-        <div id="story-dots" class="story-dots"></div>
-        <p class="story-actions">
-          <button type="button" class="btn btn-outline" id="story-prev">Indietro</button>
-          <button type="button" class="btn btn-primary" id="story-play">Ascolta</button>
-          <button type="button" class="btn btn-primary" id="story-next">Avanti</button>
-        </p>
-        <p class="upload-hint">Cartoon a tappe. Clicca Ascolta: parla il browser, in italiano.</p>
+      <div class="video-wrap">
+        <video class="story-video" controls playsinline poster="video-poster.jpg" preload="metadata">
+          <source src="perche-prevedere.mp4" type="video/mp4">
+        </video>
       </div>
-      <script src="story.js"></script>
+      <p class="upload-hint" style="text-align:center;color:#cfe0f0;margin-top:12px;">30 secondi. Alza l’audio.</p>
     </div>
   </section>
 
