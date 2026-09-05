@@ -131,7 +131,7 @@ algorithm.addEventListener('change', () => {
 
 // ===== START APP =====
 function startApp() {
-  const hide = ['home', 'come-funziona', 'prezzi'];
+  const hide = ['home', 'come-funziona', 'prezzi', 'video-perche', 'promessa'];
   hide.forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.style.display = 'none';
@@ -149,11 +149,12 @@ function startApp() {
 }
 
 function showSiteSection(id) {
-  document.getElementById('home').style.display = '';
-  document.getElementById('come-funziona').style.display = '';
-  document.getElementById('prezzi').style.display = '';
-  appArea.style.display = 'none';
-  const el = document.getElementById(id);
+  ['home', 'come-funziona', 'prezzi', 'video-perche', 'promessa'].forEach((sid) => {
+    const n = document.getElementById(sid);
+    if (n) n.style.display = '';
+  });
+  if (appArea) appArea.style.display = 'none';
+  const el = document.getElementById(id || 'home');
   if (el) el.scrollIntoView({ behavior: 'smooth' });
 }
 
