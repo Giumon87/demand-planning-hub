@@ -1,20 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" role="img" aria-label="Demand Planning Hub">
-  <circle cx="100" cy="100" r="96" fill="#f4f7fa"/>
-  <circle cx="100" cy="100" r="92" fill="#0B2545"/>
-  <circle cx="100" cy="100" r="84" fill="#f4f7fa"/>
-  <rect x="48" y="108" width="14" height="28" rx="2" fill="#d5dee8"/>
-  <rect x="68" y="92" width="14" height="44" rx="2" fill="#d5dee8"/>
-  <rect x="88" y="84" width="14" height="52" rx="2" fill="#c1ccd8"/>
-  <rect x="108" y="72" width="14" height="64" rx="2" fill="#c1ccd8"/>
-  <rect x="128" y="58" width="14" height="78" rx="2" fill="#b7c4d2"/>
-  <polyline points="46,118 70,88 96,98 128,62 154,48" fill="none" stroke="#1B4F8A" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
-  <circle cx="46" cy="118" r="7" fill="#1B4F8A"/>
-  <circle cx="70" cy="88" r="7" fill="#1B4F8A"/>
-  <circle cx="96" cy="98" r="7" fill="#1B4F8A"/>
-  <circle cx="128" cy="62" r="7" fill="#1B4F8A"/>
-  <circle cx="154" cy="48" r="7" fill="#2B7FC1"/>
-  <path id="arc" d="M40,148 A68,68 0 0 0 160,148" fill="none"/>
-  <text font-family="Arial, Helvetica, sans-serif" font-size="9" font-weight="700" fill="#0B2545" letter-spacing="1.2">
-    <textPath href="#arc" startOffset="50%" text-anchor="middle">DEMAND PLANNING HUB</textPath>
-  </text>
+  <rect width="200" height="200" fill="#F4F7FA"/>
+  <rect x="26" y="116" width="20" height="38" rx="2" fill="#D5DEE8"/>
+  <rect x="54" y="96" width="20" height="58" rx="2" fill="#D5DEE8"/>
+  <rect x="82" y="86" width="20" height="68" rx="2" fill="#C1CCD8"/>
+  <rect x="110" y="70" width="20" height="84" rx="2" fill="#C1CCD8"/>
+  <rect x="138" y="50" width="20" height="104" rx="2" fill="#B7C4D2"/>
+  <polyline points="26,126 58,90 90,102 126,62 166,40" fill="none" stroke="#1B4F8A" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="26" cy="126" r="8" fill="#1B4F8A"/>
+  <circle cx="58" cy="90" r="8" fill="#1B4F8A"/>
+  <circle cx="90" cy="102" r="8" fill="#1B4F8A"/>
+  <circle cx="126" cy="62" r="8" fill="#1B4F8A"/>
+  <circle cx="166" cy="40" r="8" fill="#2B7FC1"/>
+  <text x="100" y="178" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="11" font-weight="700" fill="#0B2545" letter-spacing="0.6">DEMAND PLANNING HUB</text>
 </svg>
