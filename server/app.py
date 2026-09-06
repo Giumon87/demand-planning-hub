@@ -86,10 +86,25 @@ def init_db() -> None:
           payload TEXT NOT NULL,
           mape REAL,
           mape_n INTEGER,
+          official INTEGER NOT NULL DEFAULT 0,
+          mae REAL,
+          bias REAL,
           created_at INTEGER NOT NULL
         );
         """
     )
+    try:
+        con.execute("ALTER TABLE forecasts ADD COLUMN official INTEGER NOT NULL DEFAULT 0")
+    except Exception:
+        pass
+    try:
+        con.execute("ALTER TABLE forecasts ADD COLUMN mae REAL")
+    except Exception:
+        pass
+    try:
+        con.execute("ALTER TABLE forecasts ADD COLUMN bias REAL")
+    except Exception:
+        pass
     con.commit()
     con.close()
 
@@ -347,30 +362,33 @@ def delete_file(file_id: int, authorization: Optional[str] = Header(None)):
     return {"ok": True}
 
 
-def _mape(prev_payload: str, new_payload: str):
+def _metrics(prev_payload: str, new_payload: str):
     try:
         old = json.loads(prev_payload)
         new = json.loads(new_payload)
     except Exception:
-        return None, 0
+        return None, 0, None, None
     hist = {}
     for s in new.get("series") or []:
         for p in s.get("history") or []:
             hist[(s.get("name"), str(p.get("date")))] = float(p.get("value") or 0)
-    errs, n = 0.0, 0
+    ape, abs_e, signed, n = 0.0, 0.0, 0.0, 0
     for s in old.get("series") or []:
         for p in s.get("forecast") or []:
             key = (s.get("name"), str(p.get("date")))
             if key not in hist:
                 continue
             a = hist[key]
+            f = float(p.get("value") or 0)
             if a == 0:
                 continue
-            errs += abs(a - float(p.get("value") or 0)) / abs(a)
+            ape += abs(a - f) / abs(a)
+            abs_e += abs(a - f)
+            signed += f - a
             n += 1
     if not n:
-        return None, 0
-    return round(100.0 * errs / n, 1), n
+        return None, 0, None, None
+    return round(100.0 * ape / n, 1), n, round(abs_e / n, 2), round(signed / n, 2)
 
 
 @app.post("/api/forecasts")
@@ -387,13 +405,13 @@ def save_forecast(authorization: Optional[str] = Header(None), title: str = Form
         "SELECT id, payload FROM forecasts WHERE company_id = ? ORDER BY created_at DESC LIMIT 1",
         (u["company_id"],),
     ).fetchone()
-    mape = mape_n = None
+    mape = mape_n = mae = bias = None
     if prev:
-        mape, mape_n = _mape(prev["payload"], payload)
+        mape, mape_n, mae, bias = _metrics(prev["payload"], payload)
         if mape_n:
             con.execute(
-                "UPDATE forecasts SET mape = ?, mape_n = ? WHERE id = ?",
-                (mape, mape_n, prev["id"]),
+                "UPDATE forecasts SET mape = ?, mape_n = ?, mae = ?, bias = ? WHERE id = ?",
+                (mape, mape_n, mae, bias, prev["id"]),
             )
     cur = con.execute(
         "INSERT INTO forecasts(company_id, user_id, title, payload, created_at) VALUES (?,?,?,?,?)",
@@ -410,7 +428,7 @@ def list_forecasts(authorization: Optional[str] = Header(None)):
     u = user_from_token(authorization)
     con = db()
     rows = con.execute(
-        "SELECT id, title, mape, mape_n, created_at FROM forecasts WHERE company_id = ? ORDER BY created_at DESC",
+        "SELECT id, title, mape, mape_n, official, mae, bias, created_at FROM forecasts WHERE company_id = ? ORDER BY created_at DESC",
         (u["company_id"],),
     ).fetchall()
     con.close()
@@ -421,6 +439,9 @@ def list_forecasts(authorization: Optional[str] = Header(None)):
                 "title": r["title"],
                 "mape": r["mape"],
                 "mape_n": r["mape_n"],
+                "official": int(r["official"] or 0),
+                "mae": r["mae"],
+                "bias": r["bias"],
                 "created_at": r["created_at"],
             }
             for r in rows
@@ -465,12 +486,31 @@ def delete_forecast(forecast_id: int, authorization: Optional[str] = Header(None
     return {"ok": True}
 
 
+@app.post("/api/forecasts/{forecast_id}/official")
+def mark_official(forecast_id: int, authorization: Optional[str] = Header(None)):
+    u = user_from_token(authorization)
+    con = db()
+    row = con.execute(
+        "SELECT id FROM forecasts WHERE id = ? AND company_id = ?",
+        (forecast_id, u["company_id"]),
+    ).fetchone()
+    if not row:
+        con.close()
+        raise HTTPException(404, "Previsione non trovata.")
+    cur = con.execute("SELECT official FROM forecasts WHERE id = ?", (forecast_id,)).fetchone()
+    flag = 0 if int(cur["official"] or 0) else 1
+    con.execute("UPDATE forecasts SET official = ? WHERE id = ?", (flag, forecast_id))
+    con.commit()
+    con.close()
+    return {"ok": True, "official": flag}
+
+
 @app.get("/api/dashboard")
 def dashboard(authorization: Optional[str] = Header(None)):
     u = user_from_token(authorization)
     con = db()
     rows = con.execute(
-        "SELECT id, title, mape, mape_n, created_at, payload FROM forecasts WHERE company_id = ? ORDER BY created_at DESC",
+        "SELECT id, title, mape, mape_n, official, mae, bias, created_at, payload FROM forecasts WHERE company_id = ? ORDER BY created_at DESC",
         (u["company_id"],),
     ).fetchall()
     con.close()
@@ -483,12 +523,19 @@ def dashboard(authorization: Optional[str] = Header(None)):
                 "title": r["title"],
                 "mape": r["mape"],
                 "mape_n": r["mape_n"],
+                "official": int(r["official"] or 0),
+                "mae": r["mae"],
+                "bias": r["bias"],
                 "created_at": r["created_at"],
             }
         )
-    mapes = [r["mape"] for r in rows if r["mape"] is not None]
-    if len(rows) >= 2:
-        older, newer = rows[1], rows[0]
+    officials = [r for r in rows if int(r["official"] or 0)]
+    pair_src = officials if len(officials) >= 2 else list(rows)
+    mapes = [r["mape"] for r in pair_src if r["mape"] is not None]
+    maes = [r["mae"] for r in pair_src if r["mae"] is not None]
+    biases = [r["bias"] for r in pair_src if r["bias"] is not None]
+    if len(pair_src) >= 2:
+        older, newer = pair_src[1], pair_src[0]
         try:
             old = json.loads(older["payload"] or "{}")
             new = json.loads(newer["payload"] or "{}")
@@ -516,7 +563,10 @@ def dashboard(authorization: Optional[str] = Header(None)):
     return {
         "azienda": u["company_name"],
         "n_forecasts": len(rows),
+        "n_official": len(officials),
         "avg_mape": round(sum(mapes) / len(mapes), 1) if mapes else None,
+        "avg_mae": round(sum(maes) / len(maes), 2) if maes else None,
+        "avg_bias": round(sum(biases) / len(biases), 2) if biases else None,
         "history": history,
         "last_compare": last_compare,
         "hint": "Salva una previsione, poi al ciclo dopo carica lo storico aggiornato e salva di nuovo: il MAPE si calcola da solo.",

@@ -76,8 +76,10 @@
     data.forecasts.forEach((f) => {
       const mape = f.mape != null ? f.mape + "% (" + f.mape_n + " punti)" : "— (aspetta il consuntivo)";
       const tr = document.createElement("tr");
-      tr.innerHTML = "<td>" + f.title + "</td><td>" + fmtDate(f.created_at) + "</td><td>" + mape +
+      const off = f.official ? "Ufficiale" : "Scenario";
+      tr.innerHTML = "<td>" + f.title + " <small>(" + off + ")</small></td><td>" + fmtDate(f.created_at) + "</td><td>" + mape +
         "</td><td><button type='button' class='btn btn-text' data-open='" + f.id + "'>Apri</button> " +
+        "<button type='button' class='btn btn-text' data-off='" + f.id + "'>" + (f.official ? "Togli ufficiale" : "Segna ufficiale") + "</button> " +
         "<button type='button' class='btn btn-text' data-rm='" + f.id + "'>Elimina</button></td>";
       box.appendChild(tr);
     });
@@ -86,6 +88,12 @@
     });
     box.querySelectorAll("[data-rm]").forEach((b) => {
       b.addEventListener("click", () => removeForecast(b.getAttribute("data-rm")));
+    });
+    box.querySelectorAll("[data-off]").forEach((b) => {
+      b.addEventListener("click", async () => {
+        await fetch(api + "/api/forecasts/" + b.getAttribute("data-off") + "/official", { method: "POST", headers: headers() });
+        await refreshForecasts();
+      });
     });
   }
 

@@ -25,7 +25,10 @@
     const kpis = document.getElementById("kpi-row");
     kpis.innerHTML =
       card("Previsioni", String(d.n_forecasts)) +
+      card("Ufficiali", String(d.n_official || 0)) +
       card("MAPE medio", d.avg_mape != null ? d.avg_mape + " %" : "—") +
+      card("MAE medio", d.avg_mae != null ? String(d.avg_mae) : "—") +
+      card("Bias medio", d.avg_bias != null ? String(d.avg_bias) : "—") +
       card("Confronti", String((d.history || []).filter((h) => h.mape != null).length));
 
     const labels = (d.history || []).slice().reverse().map((h) =>

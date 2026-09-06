@@ -722,7 +722,13 @@ btnCalculate.addEventListener('click', async () => {
   });
 
   if (isPro()) {
-    if (document.getElementById('hier-mode')?.value === 'topdown') {
+    const hm = document.getElementById('hier-mode')?.value;
+    if (hm === 'line' || hm === 'topdown' || hm === 'family') {
+      if (hm === 'line') {
+        const lin = applyLineTopDown(forecastResults, seriesData, nPeriods, algo, win);
+        forecastResults = lin.results;
+        warnings.push(...lin.notes);
+      }
       const fam = applyFamilyTopDown(forecastResults, seriesData, nPeriods, algo, win);
       forecastResults = fam.results;
       warnings.push(...fam.notes);
@@ -1690,9 +1696,10 @@ function historicalUplift(product, cliente) {
 
 function parseHierarchySheet(workbook) {
   return sheetRows(workbook, ['gerarch', 'hierarch', 'famigl']).map(r => ({
+    line: String(colPick(r, ['businessline', 'business_line', 'linea', 'line', 'divisione'])).trim(),
     family: String(colPick(r, ['famiglia', 'family', 'padre'])).trim(),
     product: String(colPick(r, ['prodotto', 'figlio', 'sku', 'series', 'serie'])).trim()
-  })).filter(r => r.family && r.product);
+  })).filter(r => r.product && (r.family || r.line));
 }
 
 function parseSubstitutionSheet(workbook) {
@@ -2031,6 +2038,68 @@ function runAlgoOnValues(values, season, nPeriods, algo, win) {
   if (algo === 'pessimistic') return bandForecast(values, season, nPeriods, -1);
   if (algo === 'compare') return compareModels(values, season, win, nPeriods).forecast;
   return linearRegressionForecast(values, nPeriods, season);
+}
+
+function applyLineTopDown(results, seriesData, nPeriods, algo, win) {
+  const notes = [];
+  const hier = workbookData.hierarchy || [];
+  const byLine = {};
+  hier.forEach(h => {
+    const line = h.line || '';
+    if (!line) return;
+    byLine[line] = byLine[line] || [];
+    byLine[line].push(h.product);
+  });
+  if (!Object.keys(byLine).length) {
+    notes.push('Nessuna BusinessLine nel foglio Gerarchia: salto il livello linea.');
+    return { results, notes };
+  }
+  const mode = document.getElementById('mix-mode')?.value || 'recent';
+  const extraResults = [];
+  Object.keys(byLine).forEach(line => {
+    const children = [];
+    const seen = {};
+    byLine[line].forEach(prod => {
+      seriesForProduct(seriesData, prod).forEach(s => {
+        if (!seen[s.name]) { seen[s.name] = 1; children.push(s); }
+      });
+    });
+    if (children.length < 2) return;
+    const dateMap = {};
+    children.forEach(ch => {
+      ch.points.forEach(p => {
+        const k = p.date.getTime();
+        dateMap[k] = dateMap[k] || { date: p.date, value: 0 };
+        dateMap[k].value += p.value;
+      });
+    });
+    const pts = Object.keys(dateMap).map(Number).sort((a, b) => a - b).map(k => dateMap[k]);
+    if (pts.length < 6) return;
+    let values = pts.map(p => p.value);
+    const dates = pts.map(p => p.date);
+    const season = inferSeasonLength(dates);
+    const cleaned = applyOutliers('Linea: ' + line, values, dates, season);
+    values = cleaned.values;
+    const famCmp = compareModels(values, season, win, nPeriods);
+    const fc = (algo === 'compare') ? famCmp.forecast : runAlgoOnValues(values, season, nPeriods, algo, win);
+    const lastDate = dates[dates.length - 1];
+    const gap = workbookData.gapDays || gapDaysFromDates(dates);
+    const futureDates = [];
+    for (let i = 1; i <= nPeriods; i++) futureDates.push(addPeriods(lastDate, i, gap));
+    extraResults.push({
+      name: 'Linea: ' + line,
+      historical: pts,
+      forecast: futureDates.map((d, i) => ({ date: d, value: fc[i] })),
+      scenarioA: futureDates.map((d, i) => ({ date: d, value: isPro() ? applyDriverScenario(fc)[i] : fc[i] })),
+      extras: [],
+      outliers: cleaned.items,
+      compare: famCmp,
+      chosen: algo === 'compare' ? famCmp.best : algo,
+      notes: ['Top-down su business line ' + line + '.']
+    });
+  });
+  if (!extraResults.length) notes.push('Nessuna riga “Linea: …” creata. Controlla BusinessLine in Gerarchia.');
+  return { results: extraResults.concat(results), notes };
 }
 
 function applyFamilyTopDown(results, seriesData, nPeriods, algo, win) {

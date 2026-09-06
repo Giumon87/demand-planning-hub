@@ -225,12 +225,13 @@
               <p class="hint">Sostituisce i punti anomali con il valore tipico dello stesso mese, senza trattarli come zero.</p>
             </div>
             <div class="form-group">
-              <label for="hier-mode">Famiglie</label>
+              <label for="hier-mode">Gerarchia</label>
               <select id="hier-mode" class="select">
                 <option value="none">Solo serie selezionate</option>
-                <option value="topdown">Prevedi famiglia e disaggrega</option>
+                <option value="family">Prevedi famiglia e disaggrega</option>
+                <option value="line">Prevedi business line, poi famiglia</option>
               </select>
-              <p class="hint">Serve il foglio Gerarchia (Famiglia, Prodotto).</p>
+              <p class="hint">Foglio Gerarchia: BusinessLine, Famiglia, Prodotto. Phase-in/out sta sul foglio Phase_in_out, non nello storico.</p>
             </div>
             <div class="form-group">
               <label for="mix-mode">Mix figli</label>
