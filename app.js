@@ -294,6 +294,7 @@ function handleFile(file) {
         hierarchy: parseHierarchySheet(workbook),
         commercial: parseCommercialSheet(workbook),
         substitutions: parseSubstitutionSheet(workbook),
+        marketing: parseMarketingSheet(workbook),
         promos: parsePromoSheet(workbook),
         promoHistory: parsePromoHistorySheet(workbook),
         longInfo,
@@ -734,6 +735,7 @@ btnCalculate.addEventListener('click', async () => {
       warnings.push(...fam.notes);
     }
     forecastResults = applyPhaseInOut(forecastResults, seriesData, nPeriods, algo, win);
+    warnings.push(...applyMarketingForecasts(forecastResults));
     const promoNotes = applyPromos(forecastResults);
     warnings.push(...promoNotes);
     applyDeclineGuard(forecastResults, seriesData);
@@ -1056,8 +1058,15 @@ function continueDecline(values, fc) {
 }
 
 function applyDeclineGuard(results, seriesData) {
+  const protectedNames = {};
+  (workbookData.substitutions || []).forEach(rule => {
+    protectedNames[seriesLabel(rule.nuovo, rule.cliente)] = 1;
+    if (rule.nuovo) protectedNames[rule.nuovo] = 1;
+  });
   (results || []).forEach(r => {
     if (!r.forecast || String(r.name).indexOf('Famiglia:') === 0) return;
+    if (String(r.name).indexOf('Linea:') === 0) return;
+    if (protectedNames[r.name]) return;
     const s = (seriesData || []).find(x => x.name === r.name);
     if (!s) return;
     const vals = (s.points || []).map(p => p.value);
@@ -1703,15 +1712,28 @@ function parseHierarchySheet(workbook) {
 }
 
 function parseSubstitutionSheet(workbook) {
-  return sheetRows(workbook, ['sostitu', 'phase', 'switch']).map(r => ({
-    nuovo: String(colPick(r, ['nuovo', 'new', 'successore'])).trim(),
-    vecchio: String(colPick(r, ['vecchio', 'old', 'predecessore'])).trim(),
-    fattore: parseFloat(String(colPick(r, ['fattore', 'factor', 'ratio'])).replace(',', '.')) || 1,
-    months: Math.max(1, parseInt(colPick(r, ['mesi_passaggio', 'mesi', 'months', 'durata']), 10) || 1),
-    startRaw: colPick(r, ['data_inizio', 'inizio', 'start', 'dal']),
-    cliente: String(colPick(r, ['cliente', 'customer', 'insegna', 'cliente_nuovo', 'cliente_target'])).trim(),
-    origine: String(colPick(r, ['cliente_origine', 'origine', 'analog', 'da_cliente', 'source'])).trim()
-  })).filter(r => r.nuovo && r.vecchio);
+  return sheetRows(workbook, ['sostitu', 'phase', 'switch', 'analog']).map(r => {
+    const tipo = String(colPick(r, ['tipo', 'type', 'azione']) || 'switch').toLowerCase();
+    return {
+      tipo: tipo.indexOf('nuovo') >= 0 || tipo.indexOf('new') >= 0 || tipo.indexOf('analog') >= 0 ? 'nuovo' : 'switch',
+      nuovo: String(colPick(r, ['nuovo', 'new', 'successore', 'prodotto'])).trim(),
+      vecchio: String(colPick(r, ['vecchio', 'old', 'predecessore', 'analogo', 'simile'])).trim(),
+      fattore: parseFloat(String(colPick(r, ['fattore', 'factor', 'ratio'])).replace(',', '.')) || 1,
+      months: Math.max(1, parseInt(colPick(r, ['mesi_passaggio', 'mesi', 'months', 'durata', 'ramp']), 10) || 6),
+      startRaw: colPick(r, ['data_inizio', 'inizio', 'start', 'dal']),
+      cliente: String(colPick(r, ['cliente', 'customer', 'insegna', 'cliente_nuovo', 'cliente_target'])).trim(),
+      origine: String(colPick(r, ['cliente_origine', 'origine', 'analog', 'da_cliente', 'source'])).trim()
+    };
+  }).filter(r => r.nuovo && r.vecchio);
+}
+
+function parseMarketingSheet(workbook) {
+  return sheetRows(workbook, ['marketing', 'seed', 'piano_lancio', 'previsioni_mkt']).map(r => ({
+    prodotto: String(colPick(r, ['prodotto', 'sku', 'nuovo', 'series'])).trim(),
+    cliente: String(colPick(r, ['cliente', 'customer', 'insegna'])).trim(),
+    date: parseDate(colPick(r, ['data', 'periodo', 'mese'])),
+    value: parseFloat(String(colPick(r, ['pezzi', 'qty', 'previsione', 'volume', 'valore'])).replace(',', '.'))
+  })).filter(r => r.prodotto && r.date && isFinite(r.value));
 }
 
 function parsePromoPct(raw) {
@@ -1910,59 +1932,47 @@ function applyPhaseInOut(results, seriesData, nPeriods, algo, win) {
   const rules = workbookData.substitutions || [];
   if (!rules.length) return results;
   rules.forEach(rule => {
+    const isNew = rule.tipo === 'nuovo';
     const newS = resolvePairSeries(seriesData, rule.nuovo, rule.cliente);
     const oldS = resolvePairSeries(seriesData, rule.vecchio, rule.origine || rule.cliente);
     let rNew = findSeries(results, seriesLabel(rule.nuovo, rule.cliente)) || findSeries(results, rule.nuovo);
     const rOld = findSeries(results, seriesLabel(rule.vecchio, rule.origine || rule.cliente)) || findSeries(results, rule.vecchio);
     if (!oldS) return;
-    if (!rNew && rOld && rule.cliente) {
+    if (!rNew && (rOld || isNew)) {
+      const tmpl = (rOld && rOld.forecast) || (results[0] && results[0].forecast) || [];
       rNew = {
         name: seriesLabel(rule.nuovo, rule.cliente),
-        historical: [],
-        forecast: rOld.forecast.map(p => ({ date: p.date, value: 0 })),
-        scenarioA: rOld.forecast.map(p => ({ date: p.date, value: 0 })),
+        historical: (newS && newS.points) || [],
+        forecast: tmpl.map(p => ({ date: p.date, value: 0 })),
+        scenarioA: tmpl.map(p => ({ date: p.date, value: 0 })),
         extras: [],
         outliers: [],
-        notes: ['Serie creata dal phase-in: nessun storico su questo cliente.']
+        notes: [isNew ? 'Prodotto nuovo: storico preso dall’analogo.' : 'Serie creata dal phase-in.']
       };
       results.push(rNew);
     }
     if (!rNew && !rOld) return;
-    const analog = !!(rule.origine && rule.origine !== rule.cliente);
-    const donorNew = newS || { points: [] };
-    const line = buildLineHistory(oldS, analog ? { points: [] } : donorNew, analog ? 1 : rule.fattore);
-    const live = trimLeadingZeros(line);
+    const live = trimLeadingZeros(oldS.points || []);
     if (live.length < 4) return;
     const values = live.map(p => p.value);
     const dates = live.map(p => p.date);
     const season = inferSeasonLength(dates);
     const rawFc = runAlgoOnValues(values, season, nPeriods, algo, win);
     const recentAvg = values.slice(-6).reduce((a, b) => a + b, 0) / Math.min(6, values.length);
-    const fc = rawFc.map(v => round2(Math.max(v, recentAvg * 0.6)));
-    const lastDate = dates[dates.length - 1];
+    const fc = rawFc.map(v => round2(Math.max(v, recentAvg * 0.35)));
     const parsedStart = rule.startRaw ? parseDate(rule.startRaw) : null;
-    const tailOld = (oldS.points || []).slice(-3);
-    const tailNew = (newS.points || []).slice(-3);
-    const sumOld = tailOld.reduce((a, p) => a + p.value, 0);
-    const sumNew = tailNew.reduce((a, p) => a + p.value, 0);
-    const lineNow = sumOld + sumNew / (rule.fattore || 1);
-    let shareNow = lineNow > 0 ? (sumNew / (rule.fattore || 1)) / lineNow : 0;
-    if (shareNow > 0.85) shareNow = 1;
-    if (shareNow < 0.05) shareNow = 0;
-
     const template = (rNew || rOld).forecast;
     for (let i = 0; i < template.length; i++) {
-      const d = template[i].date || new Date(lastDate.getFullYear(), lastDate.getMonth() + i + 1, 1);
+      const d = template[i].date;
       let sn = parsedStart
         ? phaseShareOnDate(parsedStart, d, rule.months)
-        : Math.min(1, shareNow + (1 - shareNow) * ((i + 1) / rule.months));
-      sn = Math.max(sn, shareNow);
+        : Math.min(1, (i + 1) / rule.months);
       const lineFc = fc[i];
-      if (analog) {
+      if (isNew) {
         if (rNew) rNew.forecast[i].value = round2(lineFc * sn * (rule.fattore || 1));
         if (rNew && rNew.scenarioA && rNew.scenarioA[i]) rNew.scenarioA[i].value = rNew.forecast[i].value;
       } else {
-        if (rNew) rNew.forecast[i].value = round2(lineFc * sn * rule.fattore);
+        if (rNew) rNew.forecast[i].value = round2(lineFc * sn * (rule.fattore || 1));
         if (rOld) rOld.forecast[i].value = round2(lineFc * (1 - sn));
         if (rNew && rNew.scenarioA && rNew.scenarioA[i]) rNew.scenarioA[i].value = rNew.forecast[i].value;
         if (rOld && rOld.scenarioA && rOld.scenarioA[i]) rOld.scenarioA[i].value = rOld.forecast[i].value;
@@ -1972,11 +1982,12 @@ function applyPhaseInOut(results, seriesData, nPeriods, algo, win) {
     const s0 = parsedStart && template[0]
       ? phaseShareOnDate(parsedStart, template[0].date, rule.months)
       : Math.min(1, shareNow + (1 - shareNow) / rule.months);
-    const note = 'Switch ' + seriesLabel(rule.vecchio, rule.origine || rule.cliente) +
+    const note = (isNew ? 'Nuovo su analogo ' : 'Switch ') +
+      seriesLabel(rule.vecchio, rule.origine || rule.cliente) +
       ' → ' + seriesLabel(rule.nuovo, rule.cliente) +
-      ': mix ultimi mesi = nuovo ' + Math.round(shareNow * 100) +
-      '%. Fattore ' + rule.fattore +
-      (rule.origine ? ('. Analogia da ' + rule.origine) : '') + '.';
+      '. Fattore ' + rule.fattore +
+      (rule.origine ? ('. Analogia da ' + rule.origine) : '') +
+      (parsedStart ? ('. Inizio ' + formatDate(parsedStart)) : '') + '.';
     if (rNew) rNew.notes = (rNew.notes || []).concat([note]);
     if (rOld) rOld.notes = (rOld.notes || []).concat([note]);
 
@@ -1989,7 +2000,29 @@ function applyPhaseInOut(results, seriesData, nPeriods, algo, win) {
       });
     }
   });
+  applyMarketingForecasts(results);
   return results;
+}
+
+function applyMarketingForecasts(results) {
+  const rows = workbookData.marketing || [];
+  if (!rows.length) return [];
+  const notes = [];
+  let hits = 0;
+  rows.forEach(m => {
+    const r = findSeries(results, seriesLabel(m.prodotto, m.cliente)) || findSeries(results, m.prodotto);
+    if (!r || !r.forecast) return;
+    const t = m.date.getTime();
+    r.forecast.forEach((p, i) => {
+      if (p.date && p.date.getFullYear() === m.date.getFullYear() && p.date.getMonth() === m.date.getMonth()) {
+        p.value = round2(m.value);
+        if (r.scenarioA && r.scenarioA[i]) r.scenarioA[i].value = p.value;
+        hits++;
+      }
+    });
+  });
+  if (hits) notes.push('Previsioni marketing: ' + hits + ' mesi sostituiti sul forecast (foglio Previsioni_marketing).');
+  return notes;
 }
 
 function computeMix(children, mode) {
