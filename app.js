@@ -300,6 +300,9 @@ function handleFile(file) {
         longInfo,
         gapDays: 30
       };
+      injectCatalogSeries();
+      headers = workbookData.headers;
+      rows = workbookData.rows;
       fileName.textContent = file.name;
       fileInfo.style.display = 'flex';
       uploadZone.style.display = 'none';
@@ -332,15 +335,24 @@ function populateColumnSelectors(headers) {
     opt.value = i;
     opt.textContent = h;
     colDate.appendChild(opt);
+  });
 
+  const groups = {};
+  headers.forEach((h, i) => {
     const looksDate = /data|date|settim/i.test(String(h)) || i === 0;
     if (looksDate) return;
+    const prod = String(h).includes(' · ') ? String(h).split(' · ')[0] : String(h);
+    groups[prod] = groups[prod] || [];
+    groups[prod].push({ i, h });
+  });
+  Object.keys(groups).sort().forEach(prod => {
+    const idxs = groups[prod].map(x => x.i).join(',');
+    const nCli = groups[prod].filter(x => String(x.h).includes(' · ')).length;
     const label = document.createElement('label');
     label.className = 'checkbox-item';
-    label.innerHTML = `
-      <input type="checkbox" value="${i}" data-name="${h}">
-      <span>${h}</span>
-    `;
+    label.innerHTML =
+      '<input type="checkbox" value="' + groups[prod][0].i + '" data-indexes="' + idxs + '" data-name="' + prod + '">' +
+      '<span>' + prod + (nCli > 1 ? ' <small>(' + nCli + ' clienti)</small>' : '') + '</span>';
     valueColumns.appendChild(label);
   });
 
@@ -376,13 +388,19 @@ document.getElementById('btn-select-none')?.addEventListener('click', () => {
 
 function updateSelectedSeries() {
   const checked = valueColumns.querySelectorAll('input[type="checkbox"]:checked');
-  selectedSeries = Array.from(checked).map(cb => ({
-    index: parseInt(cb.value),
-    name: cb.dataset.name
-  }));
+  const headers = (workbookData && workbookData.headers) || [];
+  selectedSeries = [];
+  checked.forEach(cb => {
+    const raw = cb.dataset.indexes || cb.value;
+    String(raw).split(',').forEach(ix => {
+      const i = parseInt(ix, 10);
+      if (!isFinite(i)) return;
+      selectedSeries.push({ index: i, name: headers[i] || cb.dataset.name });
+    });
+  });
 
-  if (!isPro() && selectedSeries.length > 5) {
-    alert('Nella versione Gratis puoi selezionare al massimo 5 serie. Sblocca il test Pro per togliere il limite.');
+  if (!isPro() && checked.length > 5) {
+    alert('Nella versione Gratis puoi selezionare al massimo 5 prodotti. Sblocca il test Pro per togliere il limite.');
     checked[checked.length - 1].checked = false;
     updateSelectedSeries();
     return;
@@ -493,9 +511,16 @@ function buildSeriesFromFile() {
       warnings.push(s.name + ': ' + invalidDates + ' righe hanno una data non valida.');
     }
     if (unique.length < 6) {
-      errors.push(
-        s.name + ': servono almeno 6 periodi validi (ora ce ne sono ' + unique.length + ').'
+      const isLaunch = (workbookData.substitutions || []).some(r =>
+        String(s.name).toLowerCase().indexOf(String(r.nuovo).toLowerCase()) === 0
       );
+      if (isLaunch) {
+        warnings.push(s.name + ': prodotto nuovo, storico corto. Uso analogo e/o marketing.');
+      } else {
+        errors.push(
+          s.name + ': servono almeno 6 periodi validi (ora ce ne sono ' + unique.length + ').'
+        );
+      }
     }
 
     // frequency / holes
@@ -619,6 +644,7 @@ btnCalculate.addEventListener('click', async () => {
   const win = parseInt(windowSize.value) || 3;
 
   let { seriesData, warnings, errors } = buildSeriesFromFile();
+  seriesData = ensureAnalogSeries(seriesData);
   if (isPro()) {
     const pad = applyPredecessorPadding(seriesData);
     warnings.push(...pad.warnings);
@@ -738,7 +764,7 @@ btnCalculate.addEventListener('click', async () => {
     warnings.push(...promoNotes);
     applyDeclineGuard(forecastResults, seriesData);
     forecastResults = applyPhaseInOut(forecastResults, seriesData, nPeriods, algo, win);
-    warnings.push(...applyMarketingForecasts(forecastResults));
+    warnings.push(...applyMarketingForecasts(forecastResults, seriesData, nPeriods, algo, win));
     if (hm === 'line' || hm === 'topdown' || hm === 'family' || hm === 'product') {
       const pr = applyProductRollup(forecastResults, seriesData, nPeriods, algo, win);
       forecastResults = pr.results;
@@ -2011,28 +2037,82 @@ function applyPhaseInOut(results, seriesData, nPeriods, algo, win) {
       });
     }
   });
-  applyMarketingForecasts(results);
   return results;
 }
 
-function applyMarketingForecasts(results) {
+function ymKey(d) {
+  return d.getFullYear() * 100 + d.getMonth();
+}
+
+function applyMarketingForecasts(results, seriesData, nPeriods, algo, win) {
   const rows = workbookData.marketing || [];
   if (!rows.length) return [];
   const notes = [];
-  let hits = 0;
+  const groups = {};
   rows.forEach(m => {
-    const r = findSeries(results, seriesLabel(m.prodotto, m.cliente)) || findSeries(results, m.prodotto);
-    if (!r || !r.forecast) return;
-    const t = m.date.getTime();
-    r.forecast.forEach((p, i) => {
-      if (p.date && p.date.getFullYear() === m.date.getFullYear() && p.date.getMonth() === m.date.getMonth()) {
-        p.value = round2(m.value);
-        if (r.scenarioA && r.scenarioA[i]) r.scenarioA[i].value = p.value;
-        hits++;
-      }
-    });
+    const k = (m.prodotto + '|' + (m.cliente || '')).toLowerCase();
+    groups[k] = groups[k] || [];
+    groups[k].push(m);
   });
-  if (hits) notes.push('Previsioni marketing: ' + hits + ' mesi sostituiti sul forecast (foglio Previsioni_marketing).');
+  Object.keys(groups).forEach(k => {
+    const list = groups[k].slice().sort((a, b) => a.date - b.date);
+    const prodotto = list[0].prodotto;
+    const cliente = list[0].cliente;
+    const r = resolvePairSeries(results, prodotto, cliente);
+    if (!r || !r.forecast) return;
+    const rule = (workbookData.substitutions || []).find(s =>
+      String(s.nuovo).toLowerCase() === String(prodotto).toLowerCase() &&
+      (!cliente || String(s.cliente).toLowerCase() === String(cliente).toLowerCase())
+    );
+    const analogName = rule ? rule.vecchio : null;
+    const analogCli = rule ? (rule.origine || rule.cliente || cliente) : cliente;
+    const analog = analogName ? resolvePairSeries(seriesData || [], analogName, analogCli) : null;
+    const factor = rule && rule.fattore ? rule.fattore : 1;
+    const trainMap = {};
+    if (analog && analog.points) {
+      analog.points.forEach(p => {
+        if (!p.date) return;
+        trainMap[ymKey(p.date)] = { date: p.date, value: round2(p.value * factor) };
+      });
+    }
+    list.forEach(m => {
+      trainMap[ymKey(m.date)] = { date: m.date, value: round2(m.value) };
+    });
+    const train = Object.keys(trainMap).map(Number).sort((a, b) => a - b).map(k => trainMap[k]);
+    if (train.length < 4) {
+      list.forEach(m => {
+        r.forecast.forEach((p, i) => {
+          if (p.date && ymKey(p.date) === ymKey(m.date)) {
+            p.value = round2(m.value);
+            if (r.scenarioA && r.scenarioA[i]) r.scenarioA[i].value = p.value;
+          }
+        });
+      });
+      return;
+    }
+    const lastSeed = list[list.length - 1].date;
+    const values = train.map(p => p.value);
+    const dates = train.map(p => p.date);
+    const season = inferSeasonLength(dates);
+    const tail = r.forecast.filter(p => p.date && ymKey(p.date) > ymKey(lastSeed));
+    const fc = tail.length ? runAlgoOnValues(values, season, tail.length, algo || 'compare', win || 3) : [];
+    r.forecast.forEach((p, i) => {
+      if (!p.date) return;
+      const mk = list.find(m => ymKey(m.date) === ymKey(p.date));
+      if (mk) {
+        p.value = round2(mk.value);
+      } else if (ymKey(p.date) > ymKey(lastSeed)) {
+        const j = tail.findIndex(t => ymKey(t.date) === ymKey(p.date));
+        if (j >= 0 && fc[j] != null) p.value = round2(Math.max(0, fc[j]));
+      }
+      if (r.scenarioA && r.scenarioA[i]) r.scenarioA[i].value = p.value;
+    });
+    r.notes = (r.notes || []).concat([
+      'Marketing come consuntivo fino a ' + formatDate(lastSeed) +
+      (analog ? ('; da dopo, modello su analogo ' + analog.name + ' × ' + factor + ' + mesi marketing.') : '.')
+    ]);
+    notes.push(r.name + ': ' + list.length + ' mesi marketing usati come storico, poi modello.');
+  });
   return notes;
 }
 
@@ -2084,52 +2164,98 @@ function runAlgoOnValues(values, season, nPeriods, algo, win) {
   return linearRegressionForecast(values, nPeriods, season);
 }
 
+function injectCatalogSeries() {
+  if (!workbookData || !workbookData.headers) return;
+  const headers = workbookData.headers;
+  const rows = workbookData.rows;
+  const clients = [];
+  headers.forEach(h => {
+    if (String(h).includes(' · ')) {
+      const c = String(h).split(' · ')[1];
+      if (c && clients.indexOf(c) < 0) clients.push(c);
+    }
+  });
+  const want = [];
+  function addWant(prod, cli) {
+    const name = cli ? (prod + ' · ' + cli) : prod;
+    if (headers.indexOf(name) < 0 && want.indexOf(name) < 0) want.push(name);
+  }
+  (workbookData.substitutions || []).forEach(s => {
+    const clis = s.cliente ? [s.cliente] : (clients.length ? clients : ['']);
+    clis.forEach(c => {
+      addWant(s.nuovo, c);
+      addWant(s.vecchio, s.origine || c);
+    });
+  });
+  (workbookData.marketing || []).forEach(m => addWant(m.prodotto, m.cliente));
+  want.forEach(name => {
+    headers.push(name);
+    rows.forEach(row => { row.push(0); });
+  });
+}
+
+function ensureAnalogSeries(seriesData) {
+  const have = {};
+  (seriesData || []).forEach(s => { have[String(s.name).toLowerCase()] = 1; });
+  const extra = [];
+  (workbookData.substitutions || []).forEach(rule => {
+    const analog = resolvePairSeries(seriesData, rule.vecchio, rule.origine || rule.cliente);
+    if (analog) return;
+    const name = seriesLabel(rule.vecchio, rule.origine || rule.cliente);
+    if (have[name.toLowerCase()]) return;
+    const idx = (workbookData.headers || []).findIndex(h => String(h).toLowerCase() === name.toLowerCase());
+    if (idx < 1) return;
+    const points = [];
+    workbookData.rows.forEach(row => {
+      const d = parseDate(row[0]);
+      const v = parseFloat(row[idx]);
+      if (d && isFinite(v)) points.push({ date: d, value: v });
+    });
+    if (points.length) {
+      extra.push({ name, points });
+      have[name.toLowerCase()] = 1;
+    }
+  });
+  return (seriesData || []).concat(extra);
+}
+
 function applyProductRollup(results, seriesData, nPeriods, algo, win) {
   const notes = [];
   const groups = {};
-  (seriesData || []).forEach(s => {
-    const n = String(s.name || '');
+  (results || []).forEach(r => {
+    const n = String(r.name || '');
     if (n.indexOf('Famiglia:') === 0 || n.indexOf('Linea:') === 0 || n.indexOf('Prodotto:') === 0) return;
     if (n.indexOf(' · ') < 0 && n.indexOf(' - ') < 0) return;
     const prod = n.split(' · ')[0].split(' - ')[0].trim();
     groups[prod] = groups[prod] || [];
-    groups[prod].push(s);
+    groups[prod].push(r);
   });
   const extra = [];
   Object.keys(groups).forEach(prod => {
     const children = groups[prod];
     if (children.length < 2) return;
-    const dateMap = {};
+    const histMap = {};
     children.forEach(ch => {
-      (ch.points || []).forEach(p => {
+      (ch.historical || []).forEach(p => {
         const k = p.date.getTime();
-        dateMap[k] = dateMap[k] || { date: p.date, value: 0 };
-        dateMap[k].value += p.value;
+        histMap[k] = histMap[k] || { date: p.date, value: 0 };
+        histMap[k].value += Number(p.value) || 0;
       });
     });
-    const pts = Object.keys(dateMap).map(Number).sort((a, b) => a - b).map(k => dateMap[k]);
-    if (pts.length < 6) return;
-    let values = pts.map(p => p.value);
-    const dates = pts.map(p => p.date);
-    const season = inferSeasonLength(dates);
-    const cleaned = applyOutliers('Prodotto: ' + prod, values, dates, season);
-    values = cleaned.values;
-    const cmp = compareModels(values, season, win, nPeriods);
-    const fc = (algo === 'compare') ? cmp.forecast : runAlgoOnValues(values, season, nPeriods, algo, win);
-    const lastDate = dates[dates.length - 1];
-    const gap = workbookData.gapDays || gapDaysFromDates(dates);
-    const futureDates = [];
-    for (let i = 1; i <= nPeriods; i++) futureDates.push(addPeriods(lastDate, i, gap));
+    const pts = Object.keys(histMap).map(Number).sort((a, b) => a - b).map(k => histMap[k]);
+    const tmpl = children[0].forecast || [];
+    const forecast = tmpl.map((p, i) => ({
+      date: p.date,
+      value: round2(children.reduce((a, ch) => a + Number((ch.forecast[i] || {}).value || 0), 0))
+    }));
     extra.push({
       name: 'Prodotto: ' + prod,
       historical: pts,
-      forecast: futureDates.map((d, i) => ({ date: d, value: fc[i] })),
-      scenarioA: futureDates.map((d, i) => ({ date: d, value: fc[i] })),
+      forecast,
+      scenarioA: forecast.map(p => ({ date: p.date, value: p.value })),
       extras: [],
-      outliers: cleaned.items,
-      compare: cmp,
-      chosen: algo === 'compare' ? cmp.best : algo,
-      notes: ['Totale ' + prod + ' su ' + children.length + ' clienti.']
+      outliers: [],
+      notes: ['Totale ' + prod + ': somma delle previsioni sui ' + children.length + ' clienti (dopo phase e marketing).']
     });
   });
   if (!extra.length) notes.push('Nessun totale prodotto: servono almeno due clienti sullo stesso SKU.');
