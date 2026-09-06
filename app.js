@@ -764,6 +764,7 @@ btnCalculate.addEventListener('click', async () => {
     warnings.push(...promoNotes);
     applyDeclineGuard(forecastResults, seriesData);
     forecastResults = applyPhaseInOut(forecastResults, seriesData, nPeriods, algo, win);
+    applyLaunchFromAnalog(forecastResults, seriesData, nPeriods, algo, win);
     warnings.push(...applyMarketingForecasts(forecastResults, seriesData, nPeriods, algo, win));
     if (hm === 'line' || hm === 'topdown' || hm === 'family' || hm === 'product') {
       const pr = applyProductRollup(forecastResults, seriesData, nPeriods, algo, win);
@@ -772,6 +773,7 @@ btnCalculate.addEventListener('click', async () => {
     }
     syncScenarioA(forecastResults);
     forecastResults = attachScenariosAfter(forecastResults);
+    forecastResults = forecastResults.filter(r => seriesWasRequested(r.name));
   }
 
   lastOutliers = forecastResults.flatMap(r => (r.outliers || []).map(o => ({ ...o, series: r.name })));
@@ -1913,7 +1915,7 @@ function phaseShareOnDate(start, date, months) {
 function applyPredecessorPadding(seriesData) {
   const warnings = [];
   const notes = [];
-  const rules = workbookData.substitutions || [];
+  const rules = (workbookData.substitutions || []).filter(ruleIsSelected);
   rules.forEach(rule => {
     const analog = !!(rule.origine && rule.origine !== rule.cliente);
     const neu = resolvePairSeries(seriesData, rule.nuovo, rule.cliente);
@@ -1965,8 +1967,34 @@ function buildLineHistory(oldS, newS, factor) {
   });
 }
 
+function applyLaunchFromAnalog(results, seriesData, nPeriods, algo, win) {
+  (workbookData.substitutions || []).filter(ruleIsSelected).forEach(rule => {
+    const analog = resolvePairSeries(seriesData, rule.vecchio, rule.origine || rule.cliente);
+    const rNew = resolvePairSeries(results, rule.nuovo, rule.cliente);
+    if (!analog || !rNew || !rNew.forecast) return;
+    const live = trimLeadingZeros(analog.points || []);
+    if (live.length < 4) return;
+    const values = live.map(p => p.value);
+    const dates = live.map(p => p.date);
+    const season = inferSeasonLength(dates);
+    const fc = runAlgoOnValues(values, season, rNew.forecast.length, algo, win);
+    const factor = rule.fattore || 1;
+    const start = rule.startRaw ? parseDate(rule.startRaw) : null;
+    rNew.forecast.forEach((p, i) => {
+      if (!p.date) return;
+      let sn = start ? phaseShareOnDate(start, p.date, rule.months) : Math.min(1, (i + 1) / rule.months);
+      if (sn <= 0) {
+        p.value = 0;
+      } else {
+        p.value = round2(Math.max(0, (fc[i] || 0) * factor * sn));
+      }
+      if (rNew.scenarioA && rNew.scenarioA[i]) rNew.scenarioA[i].value = p.value;
+    });
+  });
+}
+
 function applyPhaseInOut(results, seriesData, nPeriods, algo, win) {
-  const rules = workbookData.substitutions || [];
+  const rules = (workbookData.substitutions || []).filter(ruleIsSelected);
   if (!rules.length) return results;
   rules.forEach(rule => {
     const isNew = rule.tipo === 'nuovo';
@@ -2058,6 +2086,8 @@ function applyMarketingForecasts(results, seriesData, nPeriods, algo, win) {
     const list = groups[k].slice().sort((a, b) => a.date - b.date);
     const prodotto = list[0].prodotto;
     const cliente = list[0].cliente;
+    const sel = selectedProductKeys();
+    if (!sel[String(prodotto).toLowerCase()] && !sel[seriesLabel(prodotto, cliente).toLowerCase()]) return;
     const r = resolvePairSeries(results, prodotto, cliente);
     if (!r || !r.forecast) return;
     const rule = (workbookData.substitutions || []).find(s =>
@@ -2194,11 +2224,39 @@ function injectCatalogSeries() {
   });
 }
 
+function selectedProductKeys() {
+  const set = {};
+  (selectedSeries || []).forEach(s => {
+    const n = String(s.name || '').toLowerCase();
+    set[n] = 1;
+    set[n.split(' · ')[0].split(' - ')[0].trim()] = 1;
+  });
+  return set;
+}
+
+function seriesWasRequested(name) {
+  const sel = selectedProductKeys();
+  const n = String(name || '').toLowerCase();
+  if (n.indexOf('famiglia:') === 0 || n.indexOf('linea:') === 0 || n.indexOf('prodotto:') === 0) {
+    return !!sel[n.split(':').slice(1).join(':').trim()];
+  }
+  return !!(sel[n] || sel[n.split(' · ')[0].split(' - ')[0].trim()]);
+}
+
+function ruleIsSelected(rule) {
+  const sel = selectedProductKeys();
+  const n = String(rule.nuovo || '').toLowerCase();
+  const v = String(rule.vecchio || '').toLowerCase();
+  return !!(sel[n] || sel[v] ||
+    sel[String(seriesLabel(rule.nuovo, rule.cliente)).toLowerCase()] ||
+    sel[String(seriesLabel(rule.vecchio, rule.origine || rule.cliente)).toLowerCase()]);
+}
+
 function ensureAnalogSeries(seriesData) {
   const have = {};
   (seriesData || []).forEach(s => { have[String(s.name).toLowerCase()] = 1; });
   const extra = [];
-  (workbookData.substitutions || []).forEach(rule => {
+  (workbookData.substitutions || []).filter(ruleIsSelected).forEach(rule => {
     const analog = resolvePairSeries(seriesData, rule.vecchio, rule.origine || rule.cliente);
     if (analog) return;
     const name = seriesLabel(rule.vecchio, rule.origine || rule.cliente);
