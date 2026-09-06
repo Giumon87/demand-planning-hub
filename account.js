@@ -214,12 +214,16 @@
   });
   document.getElementById("link-forgot").addEventListener("click", async (e) => {
     e.preventDefault();
-    const email = document.getElementById("email").value;
-    const password = prompt("Nuova password (min. 8 caratteri):");
-    if (!password) return;
-    const code = prompt("Codice reset pilota:");
+    const email = document.getElementById("email").value || prompt("Email dell’account:");
+    if (!email) return;
     try {
-      await postForm("/api/reset-password", { email, password, code: code || "" });
+      await postForm("/api/reset-request", { email });
+      msg("auth-msg", "Se l’email è registrata riceverai un codice (20 minuti).", true);
+      const code = prompt("Codice ricevuto via email:");
+      if (!code) return;
+      const password = prompt("Nuova password (min. 8 caratteri):");
+      if (!password) return;
+      await postForm("/api/reset-password", { email, password, code });
       msg("auth-msg", "Password aggiornata. Ora accedi.", true);
     } catch (err) {
       msg("auth-msg", err.message, false);
@@ -236,6 +240,9 @@
         azienda: document.getElementById("azienda").value
       });
       localStorage.setItem(tokenKey, body.token);
+      if (body.piano === "pro" || body.piano === "promax" || body.piano === "pilot") {
+        localStorage.setItem("dph_tier", body.piano === "pro" ? "pro" : "promax");
+      }
       msg("auth-msg", "Account creato.", true);
       await refreshMe();
     } catch (e) {
@@ -250,6 +257,9 @@
         password: document.getElementById("password").value
       });
       localStorage.setItem(tokenKey, body.token);
+      if (body.piano === "pro" || body.piano === "promax" || body.piano === "pilot") {
+        localStorage.setItem("dph_tier", body.piano === "pro" ? "pro" : "promax");
+      }
       await refreshMe();
     } catch (e) {
       msg("auth-msg", e.message, false);

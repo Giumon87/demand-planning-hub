@@ -12,7 +12,10 @@ import time
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, Header, HTTPException, UploadFile
+import smtplib
+from email.message import EmailMessage
+
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -67,6 +70,20 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS sessions (
           token TEXT PRIMARY KEY,
           user_id INTEGER NOT NULL REFERENCES users(id),
+          created_at INTEGER NOT NULL,
+          expires_at INTEGER
+        );
+        CREATE TABLE IF NOT EXISTS reset_tokens (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          email TEXT NOT NULL,
+          code_hash TEXT NOT NULL,
+          expires_at INTEGER NOT NULL,
+          used INTEGER NOT NULL DEFAULT 0,
+          created_at INTEGER NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS auth_events (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          key TEXT NOT NULL,
           created_at INTEGER NOT NULL
         );
         CREATE TABLE IF NOT EXISTS files (
@@ -105,6 +122,10 @@ def init_db() -> None:
         con.execute("ALTER TABLE forecasts ADD COLUMN bias REAL")
     except Exception:
         pass
+    try:
+        con.execute("ALTER TABLE sessions ADD COLUMN expires_at INTEGER")
+    except Exception:
+        pass
     con.commit()
     con.close()
 
@@ -127,6 +148,66 @@ def now() -> int:
     return int(time.time())
 
 
+SESSION_TTL = int(os.environ.get("DPH_SESSION_TTL", str(14 * 24 * 3600)))
+RESET_TTL = 20 * 60
+PAID_PIANI = {"pilot", "pro", "promax"}
+
+
+def client_ip(request: Optional[Request]) -> str:
+    if request is None:
+        return "unknown"
+    fwd = request.headers.get("x-forwarded-for") or ""
+    return (fwd.split(",")[0].strip() or (request.client.host if request.client else "unknown"))[:80]
+
+
+def rate_limit(key: str, maxn: int = 8, window: int = 600) -> None:
+    cut = now() - window
+    con = db()
+    con.execute("DELETE FROM auth_events WHERE created_at < ?", (now() - 86400,))
+    n = con.execute(
+        "SELECT COUNT(*) AS n FROM auth_events WHERE key = ? AND created_at > ?",
+        (key, cut),
+    ).fetchone()["n"]
+    if n >= maxn:
+        con.close()
+        raise HTTPException(429, "Troppi tentativi. Riprova tra qualche minuto.")
+    con.execute("INSERT INTO auth_events(key, created_at) VALUES (?,?)", (key, now()))
+    con.commit()
+    con.close()
+
+
+def send_reset_email(to_email: str, code: str) -> bool:
+    host = os.environ.get("SMTP_HOST") or ""
+    user = os.environ.get("SMTP_USER") or ""
+    password = os.environ.get("SMTP_PASS") or ""
+    sender = os.environ.get("SMTP_FROM") or user or "info@demandplanninghub.com"
+    if not host or not user:
+        print("RESET_CODE_FOR", to_email, "scade in 20 min — configura SMTP_HOST/SMTP_USER/SMTP_PASS per inviarlo via email.")
+        return False
+    msg = EmailMessage()
+    msg["Subject"] = "Codice reset password — Demand Planning Hub"
+    msg["From"] = sender
+    msg["To"] = to_email
+    msg.set_content(
+        "Il tuo codice di reset è: " + code + "\n\nScade tra 20 minuti. "
+        "Se non hai chiesto tu il reset, ignora questa email.\n"
+    )
+    try:
+        port = int(os.environ.get("SMTP_PORT", "587"))
+        with smtplib.SMTP(host, port, timeout=20) as s:
+            s.starttls()
+            s.login(user, password)
+            s.send_message(msg)
+        return True
+    except Exception as exc:
+        print("SMTP_FAIL", exc)
+        return False
+
+
+def piano_allows_engine(piano: str) -> bool:
+    return str(piano or "").lower() in PAID_PIANI
+
+
 def user_from_token(authorization: Optional[str]) -> sqlite3.Row:
     if not authorization or not authorization.lower().startswith("bearer "):
         raise HTTPException(401, "Accedi prima.")
@@ -136,7 +217,7 @@ def user_from_token(authorization: Optional[str]) -> sqlite3.Row:
     con = db()
     row = con.execute(
         """
-        SELECT u.*, c.name AS company_name, c.piano
+        SELECT u.*, c.name AS company_name, c.piano, s.created_at AS sess_created, s.expires_at AS sess_exp
         FROM sessions s
         JOIN users u ON u.id = s.user_id
         JOIN companies c ON c.id = u.company_id
@@ -144,9 +225,17 @@ def user_from_token(authorization: Optional[str]) -> sqlite3.Row:
         """,
         (token,),
     ).fetchone()
-    con.close()
     if not row:
+        con.close()
         raise HTTPException(401, "Sessione scaduta. Accedi di nuovo.")
+    exp = row["sess_exp"] if "sess_exp" in row.keys() else None
+    created = row["sess_created"] if "sess_created" in row.keys() else 0
+    if (exp and exp < now()) or (not exp and created and created + SESSION_TTL < now()):
+        con.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        con.commit()
+        con.close()
+        raise HTTPException(401, "Sessione scaduta. Accedi di nuovo.")
+    con.close()
     return row
 
 
@@ -189,7 +278,10 @@ def register(
     )
     uid = con.execute("SELECT last_insert_rowid()").fetchone()[0]
     token = secrets.token_urlsafe(32)
-    con.execute("INSERT INTO sessions(token, user_id, created_at) VALUES (?,?,?)", (token, uid, now()))
+    con.execute(
+        "INSERT INTO sessions(token, user_id, created_at, expires_at) VALUES (?,?,?,?)",
+        (token, uid, now(), now() + SESSION_TTL),
+    )
     con.commit()
     con.close()
     return {
@@ -203,9 +295,11 @@ def register(
 
 
 @app.post("/api/login")
-def login(email: str = Form(...), password: str = Form(...)):
+def login(email: str = Form(...), password: str = Form(...), request: Request = None):
     email = email.strip().lower()
     password = password.strip()
+    rate_limit("login:" + email, 8, 600)
+    rate_limit("login-ip:" + client_ip(request), 20, 600)
     con = db()
     row = con.execute(
         """
@@ -222,7 +316,10 @@ def login(email: str = Form(...), password: str = Form(...)):
         con.close()
         raise HTTPException(401, "Password non corretta per questa email.")
     token = secrets.token_urlsafe(32)
-    con.execute("INSERT INTO sessions(token, user_id, created_at) VALUES (?,?,?)", (token, row["id"], now()))
+    con.execute(
+        "INSERT INTO sessions(token, user_id, created_at, expires_at) VALUES (?,?,?,?)",
+        (token, row["id"], now(), now() + SESSION_TTL),
+    )
     con.commit()
     con.close()
     return {
@@ -235,23 +332,84 @@ def login(email: str = Form(...), password: str = Form(...)):
     }
 
 
-@app.post("/api/reset-password")
-def reset_password(email: str = Form(...), password: str = Form(...), code: str = Form(...)):
-    if code.strip().upper() != "DPH-RESET-2026":
-        raise HTTPException(403, "Codice reset non valido.")
-    if len(password.strip()) < 8:
-        raise HTTPException(400, "La nuova password deve avere almeno 8 caratteri.")
+@app.post("/api/reset-request")
+def reset_request(email: str = Form(...), request: Request = None):
     email = email.strip().lower()
+    rate_limit("reset:" + email, 4, 600)
+    rate_limit("reset-ip:" + client_ip(request), 10, 600)
     con = db()
     row = con.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
-    if not row:
+    sent = False
+    if row:
+        code = f"{secrets.randbelow(1000000):06d}"
+        con.execute(
+            "INSERT INTO reset_tokens(email, code_hash, expires_at, used, created_at) VALUES (?,?,?,?,?)",
+            (email, hash_pw(code), now() + RESET_TTL, 0, now()),
+        )
+        con.commit()
+        sent = send_reset_email(email, code)
+    con.close()
+    return {
+        "ok": True,
+        "hint": "Se l’email è registrata riceverai un codice valido 20 minuti."
+        + ("" if sent or not row else " (SMTP non configurato: il codice è nei log del server.)"),
+    }
+
+
+@app.post("/api/reset-password")
+def reset_password(email: str = Form(...), password: str = Form(...), code: str = Form(...), request: Request = None):
+    email = email.strip().lower()
+    rate_limit("reset-ok:" + email, 8, 600)
+    if len(password.strip()) < 8:
+        raise HTTPException(400, "La nuova password deve avere almeno 8 caratteri.")
+    raw = (code or "").strip()
+    if len(raw) < 4:
+        raise HTTPException(403, "Codice reset non valido o scaduto.")
+    con = db()
+    rows = con.execute(
+        "SELECT id, code_hash, expires_at FROM reset_tokens WHERE email = ? AND used = 0 ORDER BY id DESC LIMIT 5",
+        (email,),
+    ).fetchall()
+    hit = None
+    for r in rows:
+        if r["expires_at"] < now():
+            continue
+        if check_pw(raw, r["code_hash"]):
+            hit = r
+            break
+    if not hit:
+        con.close()
+        raise HTTPException(403, "Codice reset non valido o scaduto.")
+    user = con.execute("SELECT id FROM users WHERE email = ?", (email,)).fetchone()
+    if not user:
         con.close()
         raise HTTPException(404, "Nessun account con questa email.")
-    con.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_pw(password.strip()), row["id"]))
-    con.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
+    con.execute("UPDATE reset_tokens SET used = 1 WHERE id = ?", (hit["id"],))
+    con.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_pw(password.strip()), user["id"]))
+    con.execute("DELETE FROM sessions WHERE user_id = ?", (user["id"],))
     con.commit()
     con.close()
     return {"ok": True}
+
+
+@app.post("/api/unlock-plan")
+def unlock_plan(code: str = Form(...), authorization: Optional[str] = Header(None)):
+    u = user_from_token(authorization)
+    raw = (code or "").strip().upper()
+    pro = (os.environ.get("DPH_PRO_CODE") or "").strip().upper()
+    pmax = (os.environ.get("DPH_PROMAX_CODE") or "").strip().upper()
+    piano = None
+    if pmax and raw == pmax:
+        piano = "promax"
+    elif pro and raw == pro:
+        piano = "pro"
+    if not piano:
+        raise HTTPException(403, "Codice non valido.")
+    con = db()
+    con.execute("UPDATE companies SET piano = ? WHERE id = ?", (piano, u["company_id"]))
+    con.commit()
+    con.close()
+    return {"ok": True, "piano": piano}
 
 
 @app.post("/api/logout")
@@ -581,7 +739,9 @@ class SmartIn(BaseModel):
 
 @app.post("/api/smart-forecast")
 def smart_forecast(body: SmartIn, authorization: Optional[str] = Header(None)):
-    user_from_token(authorization)
+    u = user_from_token(authorization)
+    if not piano_allows_engine(u["piano"]):
+        raise HTTPException(403, "Motore server riservato ai piani Pro / ProMax.")
     if len(body.values) > 400:
         raise HTTPException(400, "Serie troppo lunga.")
     return auto_forecast(body.values, body.season, body.periods)

@@ -38,11 +38,8 @@ const modalClose = document.getElementById('modal-close');
 const formRegister = document.getElementById('form-register');
 
 // ===== HINT ALGORITMI =====
-const PRO_CODE = 'DPH-PRO-2026';
-const PROMAX_CODE = 'DPH-TEST-2026';
-
 function currentTier() {
-  return localStorage.getItem('dph_tier') || (localStorage.getItem('dph_pro_test') === '1' ? 'promax' : 'base');
+  return localStorage.getItem('dph_tier') || 'base';
 }
 
 function isPro() {
@@ -91,17 +88,24 @@ function applyProUi() {
   }
 }
 
-function unlockTier(want) {
-  const code = prompt(want === 'promax' ? 'Codice test ProMax:' : 'Codice test Pro:');
-  const v = (code || '').trim().toUpperCase();
-  if (want === 'promax' && (v === PROMAX_CODE || v === 'DPH-PROMAX-2026')) {
-    setTier('promax');
-    alert('ProMax di test: grano prodotto-cliente, promo storiche e future, phase-in per cliente.');
-  } else if (want === 'pro' && (v === PRO_CODE || v === PROMAX_CODE)) {
-    setTier('pro');
-    alert('Pro di test: famiglie, promo di linea, settimane, modelli extra.');
-  } else {
-    alert('Codice non valido. Pro: DPH-PRO-2026  ·  ProMax: DPH-TEST-2026');
+async function unlockTier(want) {
+  const code = prompt(want === 'promax' ? 'Codice ProMax:' : 'Codice Pro:');
+  if (!code) return;
+  const tok = localStorage.getItem('dph_token');
+  if (!tok) {
+    alert('Accedi all’area aziendale, poi sblocca il piano. Il codice si valida sul server, non nel browser.');
+    return;
+  }
+  try {
+    const body = new FormData();
+    body.append('code', code.trim());
+    const res = await fetch('/api/unlock-plan', { method: 'POST', headers: { Authorization: 'Bearer ' + tok }, body });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.detail || 'Codice non valido.');
+    setTier(data.piano === 'promax' ? 'promax' : 'pro');
+    alert(data.piano === 'promax' ? 'ProMax attivo sull’azienda.' : 'Pro attivo sull’azienda.');
+  } catch (err) {
+    alert(err.message || 'Sblocco non riuscito.');
   }
 }
 
