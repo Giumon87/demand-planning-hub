@@ -583,6 +583,10 @@ async function applyServerEngine(results, seriesData, nPeriods, algo) {
   for (let i = 0; i < results.length; i++) {
     const res = results[i];
     if (String(res.name).indexOf('Famiglia:') === 0) continue;
+    if (String(res.name).indexOf('Linea:') === 0 || String(res.name).indexOf('Prodotto:') === 0) continue;
+    if ((workbookData.substitutions || []).some(rule =>
+      String(res.name).toLowerCase().indexOf(String(rule.nuovo).toLowerCase()) === 0
+    )) continue;
     const serie = (seriesData || []).find(s => s.name === res.name);
     if (!serie) continue;
     const src = serie.modelPoints || serie.points || [];
@@ -788,6 +792,11 @@ btnCalculate.addEventListener('click', async () => {
     showValidation('warn', 'Motore server in corso (AutoARIMA, ETS, MSTL, Prophet). Il grafico si aggiorna da solo.', []);
     try {
       await applyServerEngine(forecastResults, lastSeriesData, nPeriods, algo);
+      if (isPro()) {
+        forecastResults = applyPhaseInOut(forecastResults, lastSeriesData, nPeriods, algo);
+        applyLaunchFromAnalog(forecastResults, lastSeriesData, nPeriods, algo, win);
+        applyMarketingForecasts(forecastResults, lastSeriesData, nPeriods, algo, win);
+      }
       lastOutliers = forecastResults.flatMap(r => (r.outliers || []).map(o => ({ ...o, series: r.name })));
       const shown = document.getElementById('series-picker');
       const name = shown && shown.value ? shown.value : (forecastResults[0] && forecastResults[0].name);
@@ -1971,15 +1980,23 @@ function applyLaunchFromAnalog(results, seriesData, nPeriods, algo, win) {
   (workbookData.substitutions || []).filter(ruleIsSelected).forEach(rule => {
     const analog = resolvePairSeries(seriesData, rule.vecchio, rule.origine || rule.cliente);
     const rNew = resolvePairSeries(results, rule.nuovo, rule.cliente);
-    if (!analog || !rNew || !rNew.forecast) return;
-    const live = trimLeadingZeros(analog.points || []);
-    if (live.length < 4) return;
-    const values = live.map(p => p.value);
-    const dates = live.map(p => p.date);
-    const season = inferSeasonLength(dates);
-    const fc = runAlgoOnValues(values, season, rNew.forecast.length, algo, win);
+    const rOld = resolvePairSeries(results, rule.vecchio, rule.origine || rule.cliente);
+    if (!rNew || !rNew.forecast) return;
+    let fc = (rOld && rOld.forecast && rOld.forecast.length === rNew.forecast.length)
+      ? rOld.forecast.map(p => Number(p.value) || 0)
+      : null;
+    if (!fc) {
+      if (!analog) return;
+      const live = trimLeadingZeros(analog.points || []);
+      if (live.length < 4) return;
+      const values = live.map(p => p.value);
+      const dates = live.map(p => p.date);
+      const season = inferSeasonLength(dates);
+      fc = runAlgoOnValues(values, season, rNew.forecast.length, algo, win);
+    }
     const factor = rule.fattore || 1;
     const start = rule.startRaw ? parseDate(rule.startRaw) : null;
+    const isNew = rule.tipo === 'nuovo';
     rNew.forecast.forEach((p, i) => {
       if (!p.date) return;
       let sn = start ? phaseShareOnDate(start, p.date, rule.months) : Math.min(1, (i + 1) / rule.months);
@@ -1989,6 +2006,10 @@ function applyLaunchFromAnalog(results, seriesData, nPeriods, algo, win) {
         p.value = round2(Math.max(0, (fc[i] || 0) * factor * sn));
       }
       if (rNew.scenarioA && rNew.scenarioA[i]) rNew.scenarioA[i].value = p.value;
+      if (!isNew && rOld && rOld.forecast[i]) {
+        rOld.forecast[i].value = round2(Math.max(0, (fc[i] || 0) * (1 - sn)));
+        if (rOld.scenarioA && rOld.scenarioA[i]) rOld.scenarioA[i].value = rOld.forecast[i].value;
+      }
     });
   });
 }
