@@ -734,11 +734,16 @@ btnCalculate.addEventListener('click', async () => {
       forecastResults = fam.results;
       warnings.push(...fam.notes);
     }
-    forecastResults = applyPhaseInOut(forecastResults, seriesData, nPeriods, algo, win);
-    warnings.push(...applyMarketingForecasts(forecastResults));
     const promoNotes = applyPromos(forecastResults);
     warnings.push(...promoNotes);
     applyDeclineGuard(forecastResults, seriesData);
+    forecastResults = applyPhaseInOut(forecastResults, seriesData, nPeriods, algo, win);
+    warnings.push(...applyMarketingForecasts(forecastResults));
+    if (hm === 'line' || hm === 'topdown' || hm === 'family' || hm === 'product') {
+      const pr = applyProductRollup(forecastResults, seriesData, nPeriods, algo, win);
+      forecastResults = pr.results;
+      warnings.push(...pr.notes);
+    }
     syncScenarioA(forecastResults);
     forecastResults = attachScenariosAfter(forecastResults);
   }
@@ -1844,10 +1849,16 @@ function seriesLabel(product, cliente) {
 }
 
 function resolvePairSeries(list, product, cliente) {
+  const kids = seriesForProduct(list, product);
   if (cliente) {
-    return findSeries(list, seriesLabel(product, cliente)) || findSeries(list, product);
+    const c = String(cliente).toLowerCase().trim();
+    const hit = kids.find(s => {
+      const n = String(s.name).toLowerCase();
+      return n.endsWith(' · ' + c) || n.endsWith(' - ' + c) || n.endsWith(' ' + c);
+    });
+    if (hit) return hit;
   }
-  return findSeries(list, product);
+  return findSeries(list, seriesLabel(product, cliente)) || findSeries(list, product) || kids[0] || null;
 }
 
 function findSeriesPair(list, product, cliente) {
@@ -1935,8 +1946,8 @@ function applyPhaseInOut(results, seriesData, nPeriods, algo, win) {
     const isNew = rule.tipo === 'nuovo';
     const newS = resolvePairSeries(seriesData, rule.nuovo, rule.cliente);
     const oldS = resolvePairSeries(seriesData, rule.vecchio, rule.origine || rule.cliente);
-    let rNew = findSeries(results, seriesLabel(rule.nuovo, rule.cliente)) || findSeries(results, rule.nuovo);
-    const rOld = findSeries(results, seriesLabel(rule.vecchio, rule.origine || rule.cliente)) || findSeries(results, rule.vecchio);
+    let rNew = resolvePairSeries(results, rule.nuovo, rule.cliente);
+    const rOld = resolvePairSeries(results, rule.vecchio, rule.origine || rule.cliente);
     if (!oldS) return;
     if (!rNew && (rOld || isNew)) {
       const tmpl = (rOld && rOld.forecast) || (results[0] && results[0].forecast) || [];
@@ -1981,7 +1992,7 @@ function applyPhaseInOut(results, seriesData, nPeriods, algo, win) {
 
     const s0 = parsedStart && template[0]
       ? phaseShareOnDate(parsedStart, template[0].date, rule.months)
-      : Math.min(1, shareNow + (1 - shareNow) / rule.months);
+      : Math.min(1, 1 / rule.months);
     const note = (isNew ? 'Nuovo su analogo ' : 'Switch ') +
       seriesLabel(rule.vecchio, rule.origine || rule.cliente) +
       ' → ' + seriesLabel(rule.nuovo, rule.cliente) +
@@ -2071,6 +2082,58 @@ function runAlgoOnValues(values, season, nPeriods, algo, win) {
   if (algo === 'pessimistic') return bandForecast(values, season, nPeriods, -1);
   if (algo === 'compare') return compareModels(values, season, win, nPeriods).forecast;
   return linearRegressionForecast(values, nPeriods, season);
+}
+
+function applyProductRollup(results, seriesData, nPeriods, algo, win) {
+  const notes = [];
+  const groups = {};
+  (seriesData || []).forEach(s => {
+    const n = String(s.name || '');
+    if (n.indexOf('Famiglia:') === 0 || n.indexOf('Linea:') === 0 || n.indexOf('Prodotto:') === 0) return;
+    if (n.indexOf(' · ') < 0 && n.indexOf(' - ') < 0) return;
+    const prod = n.split(' · ')[0].split(' - ')[0].trim();
+    groups[prod] = groups[prod] || [];
+    groups[prod].push(s);
+  });
+  const extra = [];
+  Object.keys(groups).forEach(prod => {
+    const children = groups[prod];
+    if (children.length < 2) return;
+    const dateMap = {};
+    children.forEach(ch => {
+      (ch.points || []).forEach(p => {
+        const k = p.date.getTime();
+        dateMap[k] = dateMap[k] || { date: p.date, value: 0 };
+        dateMap[k].value += p.value;
+      });
+    });
+    const pts = Object.keys(dateMap).map(Number).sort((a, b) => a - b).map(k => dateMap[k]);
+    if (pts.length < 6) return;
+    let values = pts.map(p => p.value);
+    const dates = pts.map(p => p.date);
+    const season = inferSeasonLength(dates);
+    const cleaned = applyOutliers('Prodotto: ' + prod, values, dates, season);
+    values = cleaned.values;
+    const cmp = compareModels(values, season, win, nPeriods);
+    const fc = (algo === 'compare') ? cmp.forecast : runAlgoOnValues(values, season, nPeriods, algo, win);
+    const lastDate = dates[dates.length - 1];
+    const gap = workbookData.gapDays || gapDaysFromDates(dates);
+    const futureDates = [];
+    for (let i = 1; i <= nPeriods; i++) futureDates.push(addPeriods(lastDate, i, gap));
+    extra.push({
+      name: 'Prodotto: ' + prod,
+      historical: pts,
+      forecast: futureDates.map((d, i) => ({ date: d, value: fc[i] })),
+      scenarioA: futureDates.map((d, i) => ({ date: d, value: fc[i] })),
+      extras: [],
+      outliers: cleaned.items,
+      compare: cmp,
+      chosen: algo === 'compare' ? cmp.best : algo,
+      notes: ['Totale ' + prod + ' su ' + children.length + ' clienti.']
+    });
+  });
+  if (!extra.length) notes.push('Nessun totale prodotto: servono almeno due clienti sullo stesso SKU.');
+  return { results: extra.concat(results), notes };
 }
 
 function applyLineTopDown(results, seriesData, nPeriods, algo, win) {
